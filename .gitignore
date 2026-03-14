@@ -1,0 +1,17 @@
+
+# Environment variable files (contain API keys)
+.env
+medvision/backend/.env
+medvision/frontend/.env
+
+# Python cache
+__pycache__/
+*.pyc
+*.pyo
+
+# Node modules
+node_modules/
+
+# Build output
+dist/
+.vite/

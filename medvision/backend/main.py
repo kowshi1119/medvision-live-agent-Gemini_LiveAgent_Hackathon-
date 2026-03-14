@@ -26,6 +26,11 @@ except Exception:
     pass
 
 logger = logging.getLogger(__name__)
+logging.basicConfig(level=logging.DEBUG, format="%(asctime)s [%(levelname)s] %(name)s: %(message)s")
+# Silence noisy third-party debug logs
+logging.getLogger("google").setLevel(logging.INFO)
+logging.getLogger("httpx").setLevel(logging.WARNING)
+logging.getLogger("uvicorn").setLevel(logging.INFO)
 
 app = FastAPI(title="MedVision API", version="1.0.0")
 app.add_middleware(
@@ -111,7 +116,15 @@ async def websocket_endpoint(websocket: WebSocket):
             live_queue.close()
 
     async def downstream():
-        """Agent -> Browser: audio + transcript + triage cards."""
+        """Agent -> Browser: audio + transcript + triage cards.
+
+        ADK v1.x Event structure:
+          event.content.parts[*].text        -> text chunk
+          event.content.parts[*].inline_data -> audio blob (mime audio/pcm)
+          event.output_transcription.text    -> audio transcript
+          event.partial                      -> True while streaming
+          event.turn_complete                -> True when turn ends
+        """
         try:
             async for event in runner.run_live(
                 user_id=user_id,
@@ -122,32 +135,71 @@ async def websocket_endpoint(websocket: WebSocket):
                 if websocket.client_state.name != "CONNECTED":
                     break
 
-                event_type = getattr(event, "type", "")
-                if event_type == "audio" and hasattr(event, "data"):
-                    await websocket.send_json(
-                        {
-                            "type": "audio_chunk",
-                            "data": base64.b64encode(event.data).decode(),
-                        }
-                    )
-                elif hasattr(event, "text") and event.text:
-                    cards = parser.process(event.text)
-                    clean = parser.clean(event.text)
+                logger.debug("Event author=%s partial=%s turn_complete=%s",
+                             getattr(event, "author", "?"),
+                             getattr(event, "partial", None),
+                             getattr(event, "turn_complete", None))
+
+                # ── Audio chunks from content.parts[*].inline_data ───────────
+                if event.content and event.content.parts:
+                    for part in event.content.parts:
+                        # Text part
+                        if part.text:
+                            cards = parser.process(part.text)
+                            clean = parser.clean(part.text)
+                            is_partial = bool(event.partial)
+                            if clean.strip():
+                                await websocket.send_json({
+                                    "type": "transcript",
+                                    "data": {
+                                        "chunk": clean,
+                                        "partial": is_partial,
+                                        "full": "" if is_partial else clean,
+                                    },
+                                })
+                            for card in cards:
+                                await websocket.send_json(
+                                    {"type": "triage_card", "data": card}
+                                )
+
+                        # Audio part
+                        if part.inline_data and part.inline_data.data:
+                            await websocket.send_json({
+                                "type": "audio_chunk",
+                                "data": base64.b64encode(
+                                    part.inline_data.data
+                                ).decode(),
+                            })
+
+                # ── Audio transcription (output_transcription.text) ──────────
+                out_tx = getattr(event, "output_transcription", None)
+                if out_tx and getattr(out_tx, "text", None):
+                    tx_text: str = out_tx.text
+                    cards = parser.process(tx_text)
+                    clean = parser.clean(tx_text)
                     if clean.strip():
-                        await websocket.send_json(
-                            {
-                                "type": "transcript",
-                                "data": {
-                                    "chunk": clean,
-                                    "partial": False,
-                                    "full": clean,
-                                },
-                            }
-                        )
+                        await websocket.send_json({
+                            "type": "transcript",
+                            "data": {
+                                "chunk": clean,
+                                "partial": False,
+                                "full": clean,
+                            },
+                        })
                     for card in cards:
-                        await websocket.send_json({"type": "triage_card", "data": card})
+                        await websocket.send_json(
+                            {"type": "triage_card", "data": card}
+                        )
+
+                # ── Flush triage parser on turn complete ─────────────────────
+                if getattr(event, "turn_complete", False):
+                    for card in parser.flush():
+                        await websocket.send_json(
+                            {"type": "triage_card", "data": card}
+                        )
+
         except Exception as exc:
-            logger.error("Downstream error: %s", exc)
+            logger.error("Downstream error: %s", exc, exc_info=True)
 
     try:
         await asyncio.gather(upstream(), downstream())
