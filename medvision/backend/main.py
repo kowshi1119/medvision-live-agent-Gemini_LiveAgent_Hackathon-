@@ -201,108 +201,115 @@ async def websocket_endpoint(websocket: WebSocket):
                     logger.error("send_to_gemini error: %s", exc, exc_info=True)
 
             async def receive_from_gemini():
-                """Forward Gemini responses to browser."""
-                logger.info("receive_from_gemini task started - waiting for events")
+                """Forward Gemini responses to browser.
+
+                IMPORTANT: gemini_session.receive() in the google-genai SDK yields
+                messages for ONE turn only — the async-for loop exits when the server
+                sends turn_complete.  We wrap it in `while True` so every subsequent
+                user turn is also handled.
+                """
+                logger.info("receive_from_gemini task started")
                 try:
-                    async for response in gemini_session.receive():
-                        # ── Wrap each message so one bad response never kills the loop ──
-                        try:
-                            logger.info("Gemini event: %s", type(response).__name__)
+                    while True:
+                        logger.info("receive_from_gemini: waiting for next turn …")
+                        async for response in gemini_session.receive():
+                            try:
+                                logger.info("Gemini event: %s", type(response).__name__)
 
-                            # ── Tool calls ───────────────────────────────────────────
-                            if response.tool_call and response.tool_call.function_calls:
-                                for fc in response.tool_call.function_calls:
-                                    logger.info("Tool call: %s(%s)", fc.name, fc.args)
-                                    if fc.name == "get_who_protocol":
-                                        result = get_who_protocol(fc.args.get("condition", "unknown"))
-                                        await gemini_session.send_tool_response(
-                                            function_responses=[
-                                                types.FunctionResponse(
-                                                    name=fc.name,
-                                                    id=fc.id,
-                                                    response={"result": result},
-                                                )
-                                            ]
-                                        )
-                                        logger.info("Tool response sent: %s", fc.name)
+                                # ── Tool calls ───────────────────────────────────────
+                                if response.tool_call and response.tool_call.function_calls:
+                                    for fc in response.tool_call.function_calls:
+                                        logger.info("Tool call: %s(%s)", fc.name, fc.args)
+                                        if fc.name == "get_who_protocol":
+                                            result = get_who_protocol(fc.args.get("condition", "unknown"))
+                                            await gemini_session.send_tool_response(
+                                                function_responses=[
+                                                    types.FunctionResponse(
+                                                        name=fc.name,
+                                                        id=fc.id,
+                                                        response={"result": result},
+                                                    )
+                                                ]
+                                            )
+                                            logger.info("Tool response sent: %s", fc.name)
 
-                            # ── Server content (audio + text) ────────────────────────
-                            if response.server_content:
-                                sc = response.server_content
+                                # ── Server content (audio + text) ────────────────────
+                                if response.server_content:
+                                    sc = response.server_content
 
-                                if sc.model_turn:
-                                    for part in sc.model_turn.parts:
-                                        if getattr(part, "inline_data", None) and part.inline_data.data:
-                                            await websocket.send_json({
-                                                "type": "audio_chunk",
-                                                "data": base64.b64encode(part.inline_data.data).decode(),
-                                            })
-                                            logger.debug("Audio chunk: %d bytes", len(part.inline_data.data))
-
-                                        elif getattr(part, "text", None):
-                                            cards = parser.process(part.text)
-                                            clean = parser.clean(part.text)
-                                            if clean.strip():
+                                    if sc.model_turn:
+                                        for part in sc.model_turn.parts:
+                                            if getattr(part, "inline_data", None) and part.inline_data.data:
                                                 await websocket.send_json({
-                                                    "type": "transcript",
-                                                    "data": clean,
+                                                    "type": "audio_chunk",
+                                                    "data": base64.b64encode(part.inline_data.data).decode(),
                                                 })
-                                                logger.info("Transcript: %s", clean[:80])
-                                            for card in cards:
-                                                await websocket.send_json({"type": "triage_card", "data": card})
-                                                logger.info("Triage card: %s", card.get("condition"))
+                                                logger.debug("Audio chunk: %d bytes", len(part.inline_data.data))
 
-                                # ── Output audio transcription ───────────────────────
-                                ot = getattr(sc, "output_transcription", None)
-                                if ot and getattr(ot, "text", None):
-                                    transcript_chunk = ot.text
-                                    cards = parser.process(transcript_chunk)
-                                    clean = parser.clean(transcript_chunk)
-                                    if clean.strip():
-                                        await websocket.send_json({
-                                            "type": "transcript",
-                                            "data": clean,
-                                        })
-                                        logger.debug("Transcript chunk: %s", clean[:80])
-                                    for card in cards:
-                                        await websocket.send_json({"type": "triage_card", "data": card})
-                                        logger.info("Triage card from transcript: %s", card.get("condition"))
+                                            elif getattr(part, "text", None):
+                                                cards = parser.process(part.text)
+                                                clean = parser.clean(part.text)
+                                                if clean.strip():
+                                                    await websocket.send_json({
+                                                        "type": "transcript",
+                                                        "data": clean,
+                                                    })
+                                                    logger.info("Transcript: %s", clean[:80])
+                                                for card in cards:
+                                                    await websocket.send_json({"type": "triage_card", "data": card})
+                                                    logger.info("Triage card: %s", card.get("condition"))
 
-                                # ── Input (user speech) transcription ────────────────
-                                it = getattr(sc, "input_transcription", None)
-                                if it and getattr(it, "text", None):
-                                    user_text = it.text.strip()
-                                    if user_text:
-                                        await websocket.send_json({
-                                            "type": "user_transcript",
-                                            "data": user_text,
-                                        })
-                                        logger.info("User said: %s", user_text[:80])
+                                    # ── Output audio transcription ────────────────────
+                                    ot = getattr(sc, "output_transcription", None)
+                                    if ot and getattr(ot, "text", None):
+                                        transcript_chunk = ot.text
+                                        cards = parser.process(transcript_chunk)
+                                        clean = parser.clean(transcript_chunk)
+                                        if clean.strip():
+                                            await websocket.send_json({
+                                                "type": "transcript",
+                                                "data": clean,
+                                            })
+                                            logger.debug("Transcript chunk: %s", clean[:80])
+                                        for card in cards:
+                                            await websocket.send_json({"type": "triage_card", "data": card})
+                                            logger.info("Triage card from transcript: %s", card.get("condition"))
 
-                                if sc.turn_complete:
-                                    for card in parser.flush():
-                                        await websocket.send_json({"type": "triage_card", "data": card})
-                                    await websocket.send_json({"type": "status", "data": "turn_complete"})
-                                    logger.info("Turn complete")
+                                    # ── Input (user speech) transcription ─────────────
+                                    it = getattr(sc, "input_transcription", None)
+                                    if it and getattr(it, "text", None):
+                                        user_text = it.text.strip()
+                                        if user_text:
+                                            await websocket.send_json({
+                                                "type": "user_transcript",
+                                                "data": user_text,
+                                            })
+                                            logger.info("User said: %s", user_text[:80])
 
-                            # ── Top-level audio blob (older SDK path) ────────────────
-                            elif (
-                                getattr(response, "data", None)
-                                and "audio" in str(getattr(response, "mime_type", ""))
-                            ):
-                                await websocket.send_json({
-                                    "type": "audio_chunk",
-                                    "data": base64.b64encode(response.data).decode(),
-                                })
+                                    if sc.turn_complete:
+                                        for card in parser.flush():
+                                            await websocket.send_json({"type": "triage_card", "data": card})
+                                        await websocket.send_json({"type": "status", "data": "turn_complete"})
+                                        logger.info("Turn complete — looping for next turn")
 
-                        except Exception as msg_exc:
-                            # Log the bad message and keep going — never kill the whole loop
-                            logger.error(
-                                "Error processing Gemini message (continuing): %s: %s",
-                                type(msg_exc).__name__,
-                                msg_exc,
-                                exc_info=True,
-                            )
+                                # ── Top-level audio blob (older SDK path) ─────────────
+                                elif (
+                                    getattr(response, "data", None)
+                                    and "audio" in str(getattr(response, "mime_type", ""))
+                                ):
+                                    await websocket.send_json({
+                                        "type": "audio_chunk",
+                                        "data": base64.b64encode(response.data).decode(),
+                                    })
+
+                            except Exception as msg_exc:
+                                logger.error(
+                                    "Error processing Gemini message (continuing): %s: %s",
+                                    type(msg_exc).__name__,
+                                    msg_exc,
+                                    exc_info=True,
+                                )
+                        # inner async-for ended (turn_complete received) — loop back
 
                 except Exception as exc:
                     logger.error("receive_from_gemini fatal: %s", type(exc).__name__, exc_info=True)
