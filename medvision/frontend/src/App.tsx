@@ -31,7 +31,7 @@ import { StatusBar } from './components/StatusBar';
 // --- Main App Component ---
 export default function App() {
   const [language, setLanguage] = useState('en');
-  const [cloudRunUrl, setCloudRunUrl] = useState(import.meta.env.VITE_CLOUD_RUN_URL || 'http://localhost:8080');
+  const [cloudRunUrl, setCloudRunUrl] = useState(import.meta.env.VITE_CLOUD_RUN_URL || 'http://localhost:8082');
 
   const {
     connectionState,
@@ -48,18 +48,32 @@ export default function App() {
   } = useGeminiLive();
 
   const [micMuted, setMicMuted] = useState(false);
-  const micMutedRef = useRef(micMuted);
+  const micMutedRef = useRef(false);
   useEffect(() => { micMutedRef.current = micMuted; }, [micMuted]);
+
+  // Track isSpeaking in a ref so sendAudioGated can read it synchronously
+  const isSpeakingRef = useRef(false);
+  useEffect(() => { isSpeakingRef.current = isSpeaking; }, [isSpeaking]);
+
+  // Diagnostic counter — logs every 20th chunk so we know audio is flowing
+  const audioSentRef = useRef(0);
 
   const GATE_MS = 800;
   const sendAudioGated = useCallback((base64: string) => {
     if (micMutedRef.current) return;
+    // Hard block while agent is actively speaking (prevents echo feedback)
+    if (isSpeakingRef.current) return;
+    // Post-speech cooldown: block for GATE_MS after the last agent audio chunk
     if (Date.now() - lastAgentChunkTs.current < GATE_MS) return;
+    audioSentRef.current += 1;
+    if (audioSentRef.current === 1 || audioSentRef.current % 20 === 0) {
+      console.log(`[MedVision Gate] ✅ Sending user audio chunk #${audioSentRef.current}`);
+    }
     sendAudio(base64);
   }, [sendAudio, lastAgentChunkTs]);
 
   const { videoRef, isActive: isCameraOn, startCamera, stopCamera, captureFrame } = useCamera();
-  const { isRecording: isMicOn, startRecording: startMic, stopRecording: stopMic } = useAudio();
+  const { isRecording: isMicOn, error: audioError, startRecording: startMic, stopRecording: stopMic } = useAudio();
 
   const handleSessionToggle = () => {
     if (connectionState === 'connected') {
@@ -137,7 +151,7 @@ export default function App() {
     <div className="flex flex-col h-screen bg-[#0A0A0F] text-slate-100 font-sans overflow-hidden">
       <AppHeader connectionState={connectionState} />
       <main className="grid flex-1 grid-cols-1 gap-4 p-4 lg:grid-cols-[340px_1fr_320px] overflow-hidden">
-        <LeftPanel isCameraOn={isCameraOn} isMicOn={isMicOn} micMuted={micMuted} onToggleMic={() => setMicMuted(m => !m)} connectionState={connectionState} videoRef={videoRef} />
+        <LeftPanel isCameraOn={isCameraOn} isMicOn={isMicOn} micMuted={micMuted} onToggleMic={() => setMicMuted(m => !m)} connectionState={connectionState} videoRef={videoRef} audioError={audioError} />
         <CenterPanel isSpeaking={isSpeaking} transcript={transcript} triageCards={triageCards} isConnected={connectionState === 'connected'} onInterrupt={interrupt} />
         <RightPanel
           connectionState={connectionState}
@@ -156,7 +170,7 @@ export default function App() {
 
 // --- Layout Components ---
 
-const LeftPanel = ({ isCameraOn, isMicOn, micMuted, onToggleMic, connectionState, videoRef }: { isCameraOn: boolean; isMicOn: boolean; micMuted: boolean; onToggleMic: () => void; connectionState: string; videoRef: React.RefObject<HTMLVideoElement> }) => (
+const LeftPanel = ({ isCameraOn, isMicOn, micMuted, onToggleMic, connectionState, videoRef, audioError }: { isCameraOn: boolean; isMicOn: boolean; micMuted: boolean; onToggleMic: () => void; connectionState: string; videoRef: React.RefObject<HTMLVideoElement>; audioError: string | null }) => (
   <div className="flex flex-col gap-4">
     <div className="flex-1 card overflow-hidden">
       <CameraFeed videoRef={videoRef} />
@@ -166,6 +180,12 @@ const LeftPanel = ({ isCameraOn, isMicOn, micMuted, onToggleMic, connectionState
       <StatusPill icon={<Volume2 size={14} />} label="AUDIO" active={isMicOn && !micMuted} />
       <StatusPill icon={<BrainCircuit size={14} />} label="AGENT" active={connectionState === 'connected'} />
     </div>
+    {audioError && (
+      <div className="flex items-start gap-2 p-2 rounded bg-red-900/40 border border-red-700">
+        <AlertTriangle size={14} className="text-red-400 mt-0.5 shrink-0" />
+        <p className="text-xs text-red-300">{audioError}</p>
+      </div>
+    )}
     {connectionState === 'connected' && (
       <button onClick={onToggleMic} className={`w-full btn flex items-center justify-center gap-2 ${micMuted ? 'btn-danger' : 'btn-secondary'}`}>
         {micMuted ? <MicOff size={16} /> : <Mic size={16} />}

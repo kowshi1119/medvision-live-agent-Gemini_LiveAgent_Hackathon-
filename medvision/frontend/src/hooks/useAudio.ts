@@ -12,15 +12,13 @@ export interface UseAudioReturn {
 const SAMPLE_RATE = 16000;
 const CHUNK_DURATION_MS = 250; // Send audio every 250ms
 
-// AudioWorklet source — runs in the dedicated audio thread.
-// Each process() call receives a 128-sample quantum; we post it straight to
-// the main thread so the existing setInterval flush logic is unchanged.
+// Inline blob fallback — used only if /pcm-capture-processor.js can't be loaded.
 const WORKLET_SOURCE = `
 class PcmCaptureProcessor extends AudioWorkletProcessor {
   process(inputs) {
     const ch = inputs[0]?.[0];
-    if (ch) this.port.postMessage(ch.slice());
-    return true; // keep processor alive
+    if (ch && ch.length > 0) this.port.postMessage(ch.slice());
+    return true;
   }
 }
 registerProcessor('pcm-capture-processor', PcmCaptureProcessor);
@@ -35,9 +33,7 @@ export function useAudio(): UseAudioReturn {
   const chunkBufferRef = useRef<Float32Array[]>([]);
   const chunkTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const onChunkRef = useRef<((base64: string) => void) | null>(null);
-  // Controls the rAF audio-level loop — avoids the old _activeRef hack on the node
   const rafActiveRef = useRef(false);
-  // Blob URL created for the worklet module — revoked on cleanup
   const blobUrlRef = useRef<string | null>(null);
 
   const [isRecording, setIsRecording] = useState(false);
@@ -64,15 +60,27 @@ export function useAudio(): UseAudioReturn {
 
       const context = new AudioContext({ sampleRate: SAMPLE_RATE });
       contextRef.current = context;
-      // AudioContext can start 'suspended' when created outside a direct
-      // user-gesture handler. Resume it so the worklet actually processes.
-      if (context.state === 'suspended') await context.resume();
+      console.log('[MedVision Audio] AudioContext sampleRate:', context.sampleRate);
 
-      // Register the PCM capture worklet via an inline Blob URL
-      const blob = new Blob([WORKLET_SOURCE], { type: 'application/javascript' });
-      const blobUrl = URL.createObjectURL(blob);
-      blobUrlRef.current = blobUrl;
-      await context.audioWorklet.addModule(blobUrl);
+      if (context.state === 'suspended') {
+        await context.resume();
+        console.log('[MedVision Audio] AudioContext resumed');
+      }
+
+      // Register the PCM capture worklet.
+      // Prefer the static public file (no CSP/blob restrictions); fall back to
+      // an inline Blob URL if the file isn't reachable (e.g. production CDN).
+      try {
+        await context.audioWorklet.addModule('/pcm-capture-processor.js');
+        console.log('[MedVision Audio] Worklet loaded from /pcm-capture-processor.js');
+      } catch (e1) {
+        console.warn('[MedVision Audio] Static worklet failed, trying blob URL:', e1);
+        const blob = new Blob([WORKLET_SOURCE], { type: 'application/javascript' });
+        const blobUrl = URL.createObjectURL(blob);
+        blobUrlRef.current = blobUrl;
+        await context.audioWorklet.addModule(blobUrl);
+        console.log('[MedVision Audio] Worklet loaded from blob URL');
+      }
 
       const source = context.createMediaStreamSource(stream);
       sourceRef.current = source;
@@ -84,15 +92,20 @@ export function useAudio(): UseAudioReturn {
       analyserRef.current = analyser;
       source.connect(analyser);
 
-      // AudioWorkletNode replaces the deprecated ScriptProcessorNode
+      // AudioWorkletNode captures PCM quanta and posts them to the main thread
       const workletNode = new AudioWorkletNode(context, 'pcm-capture-processor');
       workletNodeRef.current = workletNode;
+      let quantaReceived = 0;
       workletNode.port.onmessage = (e: MessageEvent<Float32Array>) => {
         chunkBufferRef.current.push(e.data);
+        quantaReceived += 1;
+        if (quantaReceived === 1) {
+          console.log('[MedVision Audio] ✅ Worklet is posting audio quanta — mic active');
+        }
       };
       source.connect(workletNode);
-      // Connect to destination so the node is alive in the audio graph.
-      // Outputs are silent (the processor never fills output buffers).
+      // Connect to destination keeps the node alive in the audio graph;
+      // outputs are silent (processor never fills output buffers).
       workletNode.connect(context.destination);
 
       // Audio level monitoring
@@ -107,7 +120,8 @@ export function useAudio(): UseAudioReturn {
       };
       requestAnimationFrame(updateLevel);
 
-      // Flush buffer at regular intervals
+      // Flush accumulated quanta to Gemini every CHUNK_DURATION_MS
+      let chunksDispatched = 0;
       chunkTimerRef.current = setInterval(() => {
         if (chunkBufferRef.current.length === 0) return;
 
@@ -120,25 +134,33 @@ export function useAudio(): UseAudioReturn {
         }
         chunkBufferRef.current = [];
 
-        // Convert Float32 PCM to Int16 PCM (16-bit signed)
         const pcm16 = float32ToInt16(combined);
         const base64 = arrayBufferToBase64(pcm16.buffer);
+        chunksDispatched += 1;
+        if (chunksDispatched % 20 === 1) {
+          console.debug(`[MedVision Audio] Dispatching chunk #${chunksDispatched} (${totalLen} samples)`);
+        }
         onChunkRef.current?.(base64);
       }, CHUNK_DURATION_MS);
 
       setIsRecording(true);
+      console.log('[MedVision Audio] Recording started');
     } catch (err) {
       const message =
-        err instanceof DOMException
-          ? `Microphone access denied: ${err.message}`
+        err instanceof DOMException && err.name === 'NotAllowedError'
+          ? 'Microphone permission denied — please allow microphone access'
+          : err instanceof DOMException && err.name === 'NotFoundError'
+          ? 'No microphone found — please connect a microphone'
+          : err instanceof Error
+          ? `Microphone error: ${err.message}`
           : 'Microphone unavailable';
+      console.error('[MedVision Audio] startRecording failed:', err);
       setError(message);
       setIsRecording(false);
     }
   }, []);
 
   const stopRecording = useCallback(() => {
-    // Stop rAF level loop
     rafActiveRef.current = false;
 
     if (chunkTimerRef.current) {
@@ -178,19 +200,10 @@ export function useAudio(): UseAudioReturn {
   }, []);
 
   useEffect(() => {
-    return () => {
-      stopRecording();
-    };
+    return () => { stopRecording(); };
   }, [stopRecording]);
 
-  return {
-    isRecording,
-    error,
-    audioLevel,
-    startRecording,
-    stopRecording,
-    getAnalyserNode,
-  };
+  return { isRecording, error, audioLevel, startRecording, stopRecording, getAnalyserNode };
 }
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
