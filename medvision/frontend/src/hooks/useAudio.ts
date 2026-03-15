@@ -12,15 +12,33 @@ export interface UseAudioReturn {
 const SAMPLE_RATE = 16000;
 const CHUNK_DURATION_MS = 250; // Send audio every 250ms
 
+// AudioWorklet source — runs in the dedicated audio thread.
+// Each process() call receives a 128-sample quantum; we post it straight to
+// the main thread so the existing setInterval flush logic is unchanged.
+const WORKLET_SOURCE = `
+class PcmCaptureProcessor extends AudioWorkletProcessor {
+  process(inputs) {
+    const ch = inputs[0]?.[0];
+    if (ch) this.port.postMessage(ch.slice());
+    return true; // keep processor alive
+  }
+}
+registerProcessor('pcm-capture-processor', PcmCaptureProcessor);
+`;
+
 export function useAudio(): UseAudioReturn {
   const contextRef = useRef<AudioContext | null>(null);
   const sourceRef = useRef<MediaStreamAudioSourceNode | null>(null);
-  const processorRef = useRef<ScriptProcessorNode | null>(null);
+  const workletNodeRef = useRef<AudioWorkletNode | null>(null);
   const analyserRef = useRef<AnalyserNode | null>(null);
   const streamRef = useRef<MediaStream | null>(null);
   const chunkBufferRef = useRef<Float32Array[]>([]);
   const chunkTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const onChunkRef = useRef<((base64: string) => void) | null>(null);
+  // Controls the rAF audio-level loop — avoids the old _activeRef hack on the node
+  const rafActiveRef = useRef(false);
+  // Blob URL created for the worklet module — revoked on cleanup
+  const blobUrlRef = useRef<string | null>(null);
 
   const [isRecording, setIsRecording] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -47,6 +65,12 @@ export function useAudio(): UseAudioReturn {
       const context = new AudioContext({ sampleRate: SAMPLE_RATE });
       contextRef.current = context;
 
+      // Register the PCM capture worklet via an inline Blob URL
+      const blob = new Blob([WORKLET_SOURCE], { type: 'application/javascript' });
+      const blobUrl = URL.createObjectURL(blob);
+      blobUrlRef.current = blobUrl;
+      await context.audioWorklet.addModule(blobUrl);
+
       const source = context.createMediaStreamSource(stream);
       sourceRef.current = source;
 
@@ -57,33 +81,26 @@ export function useAudio(): UseAudioReturn {
       analyserRef.current = analyser;
       source.connect(analyser);
 
-      // Script processor for raw PCM capture
-      const processor = context.createScriptProcessor(4096, 1, 1);
-      processorRef.current = processor;
-
-      processor.onaudioprocess = (event: AudioProcessingEvent) => {
-        const inputBuffer = event.inputBuffer.getChannelData(0);
-        chunkBufferRef.current.push(new Float32Array(inputBuffer));
+      // AudioWorkletNode replaces the deprecated ScriptProcessorNode
+      const workletNode = new AudioWorkletNode(context, 'pcm-capture-processor');
+      workletNodeRef.current = workletNode;
+      workletNode.port.onmessage = (e: MessageEvent<Float32Array>) => {
+        chunkBufferRef.current.push(e.data);
       };
+      source.connect(workletNode);
+      // No need to connect workletNode to destination — we only read input
 
-      source.connect(processor);
-      processor.connect(context.destination);
-
-      // Audio level monitoring — use a ref so the loop doesn't
-      // capture a stale `isRecording` value
-      const activeRef = { current: true };
+      // Audio level monitoring
+      rafActiveRef.current = true;
       const dataArray = new Uint8Array(analyser.frequencyBinCount);
       const updateLevel = () => {
-        if (!activeRef.current || !analyserRef.current) return;
+        if (!rafActiveRef.current || !analyserRef.current) return;
         analyserRef.current.getByteFrequencyData(dataArray);
         const avg = dataArray.reduce((sum, val) => sum + val, 0) / dataArray.length;
         setAudioLevel(avg / 255);
         requestAnimationFrame(updateLevel);
       };
       requestAnimationFrame(updateLevel);
-
-      // Store ref for cleanup
-      (processorRef as React.MutableRefObject<ScriptProcessorNode & { _activeRef?: { current: boolean } }>).current!._activeRef = activeRef;
 
       // Flush buffer at regular intervals
       chunkTimerRef.current = setInterval(() => {
@@ -116,18 +133,19 @@ export function useAudio(): UseAudioReturn {
   }, []);
 
   const stopRecording = useCallback(() => {
+    // Stop rAF level loop
+    rafActiveRef.current = false;
+
     if (chunkTimerRef.current) {
       clearInterval(chunkTimerRef.current);
       chunkTimerRef.current = null;
     }
     chunkBufferRef.current = [];
 
-    if (processorRef.current) {
-      // Stop the rAF level loop
-      const p = processorRef.current as ScriptProcessorNode & { _activeRef?: { current: boolean } };
-      if (p._activeRef) p._activeRef.current = false;
-      processorRef.current.disconnect();
-      processorRef.current = null;
+    if (workletNodeRef.current) {
+      workletNodeRef.current.port.close();
+      workletNodeRef.current.disconnect();
+      workletNodeRef.current = null;
     }
     if (sourceRef.current) {
       sourceRef.current.disconnect();
@@ -140,6 +158,10 @@ export function useAudio(): UseAudioReturn {
     if (streamRef.current) {
       streamRef.current.getTracks().forEach(t => t.stop());
       streamRef.current = null;
+    }
+    if (blobUrlRef.current) {
+      URL.revokeObjectURL(blobUrlRef.current);
+      blobUrlRef.current = null;
     }
     analyserRef.current = null;
     setIsRecording(false);
