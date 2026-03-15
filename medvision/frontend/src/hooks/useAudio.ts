@@ -64,6 +64,9 @@ export function useAudio(): UseAudioReturn {
 
       const context = new AudioContext({ sampleRate: SAMPLE_RATE });
       contextRef.current = context;
+      // AudioContext can start 'suspended' when created outside a direct
+      // user-gesture handler. Resume it so the worklet actually processes.
+      if (context.state === 'suspended') await context.resume();
 
       // Register the PCM capture worklet via an inline Blob URL
       const blob = new Blob([WORKLET_SOURCE], { type: 'application/javascript' });
@@ -88,7 +91,9 @@ export function useAudio(): UseAudioReturn {
         chunkBufferRef.current.push(e.data);
       };
       source.connect(workletNode);
-      // No need to connect workletNode to destination — we only read input
+      // Connect to destination so the node is alive in the audio graph.
+      // Outputs are silent (the processor never fills output buffers).
+      workletNode.connect(context.destination);
 
       // Audio level monitoring
       rafActiveRef.current = true;
