@@ -32,15 +32,29 @@ export default function App() {
   const { isActive: isCameraOn, startCamera, stopCamera, captureFrame, videoRef } = useCamera();
   const { isRecording: isMicOn, startRecording: startMic, stopRecording: stopMic } = useAudio();
 
-  // Gate mic audio: do NOT send while agent is speaking.
-  // Without this, the speaker output is picked up by the mic and sent back
-  // to Gemini, breaking its VAD so it never detects end-of-speech.
-  const isSpeakingRef = useRef(false);
-  useEffect(() => { isSpeakingRef.current = isSpeaking; }, [isSpeaking]);
+  // Mic mute — user can toggle during a live session
+  const [micMuted, setMicMuted] = useState(false);
+
+  // Time-based echo gate: block mic for 700 ms after the last agent audio chunk.
+  // This is far more reliable than gating on isSpeaking state (which can get stuck).
+  // The browser's echoCancellation:true already suppresses most feedback;
+  // this cooldown just covers the tail end of playback.
+  const lastAgentAudioRef = useRef(0);
+  const GATE_COOLDOWN_MS = 700;
+
   const sendAudioGated = useCallback(
-    (base64: string) => { if (!isSpeakingRef.current) sendAudio(base64); },
-    [sendAudio]
+    (base64: string) => {
+      if (micMuted) return;
+      if (Date.now() - lastAgentAudioRef.current < GATE_COOLDOWN_MS) return;
+      sendAudio(base64);
+    },
+    [micMuted, sendAudio]
   );
+
+  // Update the gate timestamp whenever the agent sends audio
+  useEffect(() => {
+    if (isSpeaking) lastAgentAudioRef.current = Date.now();
+  }, [isSpeaking]);
 
   // Send video frames to Gemini while connected and camera is active
   const captureFrameRef = useRef(captureFrame);
@@ -57,26 +71,26 @@ export default function App() {
     return () => clearInterval(interval);
   }, [connectionState, isCameraOn]);
 
-  // Restart mic + camera whenever the WS connection (re-)establishes —
-  // covers both the initial connect and background auto-reconnects.
-  useEffect(() => {
-    if (connectionState === 'connected') {
-      if (!isCameraOn) startCamera();
-      if (!isMicOn)    startMic(sendAudioGated);
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [connectionState]); // intentionally omit stable refs to avoid double-start
-
   const handleSessionToggle = () => {
     if (connectionState === 'connected') {
       disconnect();
       stopCamera();
       stopMic();
+      setMicMuted(false);
     } else if (connectionState !== 'connecting') {
-      // Works from any non-active state: disconnected, error, reconnecting
       connect(cloudRunUrl, language);
       startCamera();
       startMic(sendAudioGated);
+    }
+  };
+
+  const handleMicToggle = () => {
+    if (!isMicOn) {
+      // Mic is fully stopped — restart it
+      startMic(sendAudioGated);
+      setMicMuted(false);
+    } else {
+      setMicMuted(prev => !prev);
     }
   };
 
@@ -118,7 +132,14 @@ export default function App() {
     <div className="flex flex-col h-screen bg-[#0A0A0F] text-slate-100 font-sans overflow-hidden">
       <AppHeader connectionState={connectionState} latency={latency} />
       <main className="grid flex-1 grid-cols-1 gap-3 p-3 lg:grid-cols-[320px_1fr_280px] overflow-hidden">
-        <LeftPanel isCameraOn={isCameraOn} isMicOn={isMicOn} videoRef={videoRef} />
+        <LeftPanel
+          isCameraOn={isCameraOn}
+          isMicOn={isMicOn}
+          micMuted={micMuted}
+          isConnected={connectionState === 'connected'}
+          onMicToggle={handleMicToggle}
+          videoRef={videoRef}
+        />
         <CenterPanel
           isSpeaking={isSpeaking}
           transcript={transcript}
@@ -126,6 +147,8 @@ export default function App() {
           userTranscript={userTranscript}
           triageCards={triageCards}
           isConnected={connectionState === 'connected'}
+          micMuted={micMuted}
+          onMicToggle={handleMicToggle}
           onInterrupt={interrupt}
         />
         <RightPanel
@@ -165,20 +188,61 @@ const AppHeader = ({ connectionState, latency }: { connectionState: string; late
   </header>
 );
 
-const LeftPanel = ({ isCameraOn, isMicOn, videoRef }: { isCameraOn: boolean; isMicOn: boolean; videoRef: React.RefObject<HTMLVideoElement> }) => (
+const LeftPanel = ({
+  isCameraOn, isMicOn, micMuted, isConnected, onMicToggle, videoRef
+}: {
+  isCameraOn: boolean; isMicOn: boolean; micMuted: boolean;
+  isConnected: boolean; onMicToggle: () => void;
+  videoRef: React.RefObject<HTMLVideoElement>;
+}) => (
   <div className="flex-col hidden gap-3 lg:flex">
     <div className="flex-1 card">
       <CameraFeed videoRef={videoRef} />
     </div>
+    {/* Mic toggle button — prominent, shown while connected */}
+    {isConnected && (
+      <button
+        onClick={onMicToggle}
+        className={`flex items-center justify-center gap-2 p-3 rounded-lg font-bold text-sm transition-all ${
+          micMuted
+            ? 'bg-red-900/60 border border-red-600 text-red-400 hover:bg-red-800/60'
+            : 'bg-emerald-900/60 border border-emerald-600 text-emerald-400 hover:bg-emerald-800/60'
+        }`}
+      >
+        {micMuted ? (
+          <>
+            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
+              <path d="M19 11a7 7 0 0 1-7 7m0 0a7 7 0 0 1-7-7m7 7v4m-4 0h8M3 3l18 18" stroke="currentColor" strokeWidth="2" fill="none" strokeLinecap="round"/>
+            </svg>
+            MIC OFF
+          </>
+        ) : (
+          <>
+            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
+              <path d="M12 2a3 3 0 0 1 3 3v7a3 3 0 0 1-6 0V5a3 3 0 0 1 3-3z"/>
+              <path d="M19 10v2a7 7 0 0 1-14 0v-2M12 19v3M8 22h8"/>
+            </svg>
+            MIC ON
+          </>
+        )}
+      </button>
+    )}
     <div className="flex items-center justify-around p-2 card">
       <StatusPill label="VISION" active={isCameraOn} />
-      <StatusPill label="AUDIO" active={isMicOn} />
+      <StatusPill label="AUDIO" active={isMicOn && !micMuted} />
       <StatusPill label="GROUNDED" active={true} />
     </div>
   </div>
 );
 
-const CenterPanel = ({ isSpeaking, transcript, partialTranscript, userTranscript, triageCards, isConnected, onInterrupt }: { isSpeaking: boolean; transcript: string; partialTranscript: string; userTranscript: string; triageCards: TriageData[]; isConnected: boolean; onInterrupt: () => void; }) => (
+const CenterPanel = ({
+  isSpeaking, transcript, partialTranscript, userTranscript,
+  triageCards, isConnected, micMuted, onMicToggle, onInterrupt
+}: {
+  isSpeaking: boolean; transcript: string; partialTranscript: string;
+  userTranscript: string; triageCards: TriageData[]; isConnected: boolean;
+  micMuted: boolean; onMicToggle: () => void; onInterrupt: () => void;
+}) => (
   <div className="relative flex flex-col gap-3 overflow-hidden">
     <div className="flex flex-col flex-1 gap-3 p-4 card overflow-hidden">
       <div className="flex items-center justify-between">
@@ -194,6 +258,36 @@ const CenterPanel = ({ isSpeaking, transcript, partialTranscript, userTranscript
         )}
       </div>
       <AgentVoiceBar isSpeaking={isSpeaking} />
+
+      {/* Mic toggle — shown when connected, centered below voice bar */}
+      {isConnected && (
+        <button
+          onClick={onMicToggle}
+          className={`flex items-center justify-center gap-2 px-4 py-2 rounded-lg font-bold text-sm transition-all w-full ${
+            micMuted
+              ? 'bg-red-900/70 border border-red-500 text-red-300 hover:bg-red-800/70 animate-pulse'
+              : 'bg-slate-800/60 border border-slate-600 text-slate-300 hover:bg-slate-700/60'
+          }`}
+        >
+          {micMuted ? (
+            <>
+              <svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
+                <line x1="1" y1="1" x2="23" y2="23"/><path d="M9 9v3a3 3 0 0 0 5.12 2.12M15 9.34V4a3 3 0 0 0-5.94-.6"/><path d="M17 16.95A7 7 0 0 1 5 12v-2m14 0v2a7 7 0 0 1-.11 1.23M12 19v3M8 23h8"/>
+              </svg>
+              MICROPHONE OFF — tap to unmute
+            </>
+          ) : (
+            <>
+              <svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
+                <path d="M12 2a3 3 0 0 1 3 3v7a3 3 0 0 1-6 0V5a3 3 0 0 1 3-3z"/>
+                <path d="M19 10v2a7 7 0 0 1-14 0v-2M12 19v3M8 22h8"/>
+              </svg>
+              MICROPHONE ON — tap to mute
+            </>
+          )}
+        </button>
+      )}
+
       {/* User's voice query */}
       {userTranscript && (
         <div className="px-3 py-2 rounded-lg bg-slate-800/60 border border-slate-700/50">
