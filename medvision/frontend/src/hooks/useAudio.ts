@@ -69,16 +69,21 @@ export function useAudio(): UseAudioReturn {
       source.connect(processor);
       processor.connect(context.destination);
 
-      // Audio level monitoring
+      // Audio level monitoring — use a ref so the loop doesn't
+      // capture a stale `isRecording` value
+      const activeRef = { current: true };
       const dataArray = new Uint8Array(analyser.frequencyBinCount);
       const updateLevel = () => {
-        if (!analyserRef.current) return;
+        if (!activeRef.current || !analyserRef.current) return;
         analyserRef.current.getByteFrequencyData(dataArray);
         const avg = dataArray.reduce((sum, val) => sum + val, 0) / dataArray.length;
         setAudioLevel(avg / 255);
-        if (isRecording) requestAnimationFrame(updateLevel);
+        requestAnimationFrame(updateLevel);
       };
       requestAnimationFrame(updateLevel);
+
+      // Store ref for cleanup
+      (processorRef as React.MutableRefObject<ScriptProcessorNode & { _activeRef?: { current: boolean } }>).current!._activeRef = activeRef;
 
       // Flush buffer at regular intervals
       chunkTimerRef.current = setInterval(() => {
@@ -108,7 +113,7 @@ export function useAudio(): UseAudioReturn {
       setError(message);
       setIsRecording(false);
     }
-  }, [isRecording]);
+  }, []);
 
   const stopRecording = useCallback(() => {
     if (chunkTimerRef.current) {
@@ -118,6 +123,9 @@ export function useAudio(): UseAudioReturn {
     chunkBufferRef.current = [];
 
     if (processorRef.current) {
+      // Stop the rAF level loop
+      const p = processorRef.current as ScriptProcessorNode & { _activeRef?: { current: boolean } };
+      if (p._activeRef) p._activeRef.current = false;
       processorRef.current.disconnect();
       processorRef.current = null;
     }

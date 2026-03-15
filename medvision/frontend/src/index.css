@@ -3,6 +3,100 @@
 @tailwind utilities;
 
 @layer base {
+  html, body, #root {
+    height: 100%;
+    margin: 0;
+    padding: 0;
+    background-color: #0A0A0F;
+    color: #F1F5F9;
+    font-family: 'Inter', sans-serif;
+    overflow: hidden;
+  }
+  ::-webkit-scrollbar {
+    width: 6px;
+    height: 6px;
+  }
+  ::-webkit-scrollbar-track {
+    background: transparent;
+  }
+  ::-webkit-scrollbar-thumb {
+    background: #27272a;
+    border-radius: 3px;
+  }
+  ::-webkit-scrollbar-thumb:hover {
+    background: #3f3f46;
+  }
+}
+
+@layer components {
+  .card {
+    @apply bg-[#12121A] border border-[rgba(255,255,255,0.08)] rounded-lg;
+  }
+  .btn {
+    @apply px-4 py-2 rounded-md text-sm font-semibold transition-colors duration-150 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-offset-[#0A0A0F];
+  }
+  .btn-primary {
+    @apply bg-red-600 text-white hover:bg-red-700 focus:ring-red-500;
+  }
+  .btn-secondary {
+    @apply bg-gray-800 text-gray-300 border border-gray-600 hover:bg-gray-700 hover:border-gray-500 focus:ring-gray-500;
+  }
+  .btn-danger {
+    @apply bg-red-900 text-red-200 border border-red-700 hover:bg-red-800 focus:ring-red-600;
+  }
+  .input-dark {
+    @apply w-full bg-gray-900 border border-gray-700 rounded-md px-3 py-1.5 text-sm text-gray-300 placeholder-gray-500 focus:outline-none focus:ring-1 focus:ring-red-500 focus:border-red-500;
+  }
+}
+
+@layer utilities {
+  .pulse-ring {
+    animation: pulse-ring-anim 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+  }
+  .slide-up {
+    animation: slide-up-anim 0.5s cubic-bezier(0.25, 0.46, 0.45, 0.94) both;
+  }
+  .wave-bar {
+    animation: wave-anim 1.2s ease-in-out infinite;
+  }
+  .blink {
+    animation: blink-anim 1s step-end infinite;
+  }
+}
+
+@keyframes pulse-ring-anim {
+  0%, 100% {
+    transform: scale(1);
+    opacity: 0.5;
+  }
+  50% {
+    transform: scale(1.5);
+    opacity: 0;
+  }
+}
+
+@keyframes slide-up-anim {
+  0% {
+    transform: translateY(20px);
+    opacity: 0;
+  }
+  100% {
+    transform: translateY(0);
+    opacity: 1;
+  }
+}
+
+@keyframes wave-anim {
+  0%, 40%, 100% { transform: scaleY(0.4); }
+  20% { transform: scaleY(1.0); }
+}
+
+@keyframes blink-anim {
+  50% { opacity: 0; }
+}
+
+
+@layer base {
   *,
   *::before,
   *::after {

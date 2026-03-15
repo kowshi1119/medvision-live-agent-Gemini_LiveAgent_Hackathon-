@@ -1,236 +1,350 @@
-import React, { useCallback, useEffect, useState } from 'react';
-import { useGeminiLive } from './hooks/useGeminiLive';
+import React, { useState, useMemo, useEffect, useRef, useCallback } from 'react';
+import { useGeminiLive, SessionLogEntry } from './hooks/useGeminiLive';
+import { useCamera } from './hooks/useCamera';
 import { useAudio } from './hooks/useAudio';
+
 import { CameraFeed } from './components/CameraFeed';
 import { AgentVoiceBar } from './components/AgentVoiceBar';
-import { TriageCard as TriageCardComponent } from './components/TriageCard';
-import { SessionLog } from './components/SessionLog';
+import { TriageCard, TriageData } from './components/TriageCard';
+import { SessionLog, LogEntry } from './components/SessionLog';
 import { StatusBar } from './components/StatusBar';
 
-// ── Language options ──────────────────────────────────────────────────────────
-
-const LANGUAGES = [
-  { code: 'en', label: 'English' },
-  { code: 'es', label: 'Español' },
-  { code: 'fr', label: 'Français' },
-  { code: 'ar', label: 'العربية' },
-  { code: 'hi', label: 'हिन्दी' },
-  { code: 'zh', label: '中文' },
-  { code: 'sw', label: 'Kiswahili' },
-  { code: 'ta', label: 'தமிழ்' },
-  { code: 'pt', label: 'Português' },
-  { code: 'ru', label: 'Русский' },
-];
-
-const CLOUD_RUN_URL =
-  (import.meta as unknown as { env: Record<string, string> }).env.VITE_CLOUD_RUN_URL ??
-  'http://localhost:8080';
-
-const REGION =
-  (import.meta as unknown as { env: Record<string, string> }).env.VITE_GCP_REGION ??
-  'us-central1';
-
-// ── App ───────────────────────────────────────────────────────────────────────
-
+// --- Main App Component ---
 export default function App() {
-  const [selectedLanguage, setSelectedLanguage] = useState('en');
-  const [isSessionActive, setIsSessionActive] = useState(false);
-  const [cloudRunUrl, setCloudRunUrl] = useState(CLOUD_RUN_URL);
-  const [latencyMs, setLatencyMs] = useState<number | null>(null);
+  const [language, setLanguage] = useState('en');
+  const [cloudRunUrl, setCloudRunUrl] = useState(import.meta.env.VITE_CLOUD_RUN_URL || 'http://localhost:8082');
 
   const {
     connectionState,
     isSpeaking,
     transcript,
     partialTranscript,
+    userTranscript,
     triageCards,
     sessionLog,
-    audioLevel,
     connect,
     disconnect,
     interrupt,
-    sendVideoFrame,
     sendAudio,
+    sendVideoFrame,
   } = useGeminiLive();
 
-  const { isRecording, error: audioError, startRecording, stopRecording } = useAudio();
+  const { isActive: isCameraOn, startCamera, stopCamera, captureFrame, videoRef } = useCamera();
+  const { isRecording: isMicOn, startRecording: startMic, stopRecording: stopMic } = useAudio();
+
+  // Gate mic audio: do NOT send while agent is speaking.
+  // Without this, the speaker output is picked up by the mic and sent back
+  // to Gemini, breaking its VAD so it never detects end-of-speech.
+  const isSpeakingRef = useRef(false);
+  useEffect(() => { isSpeakingRef.current = isSpeaking; }, [isSpeaking]);
+  const sendAudioGated = useCallback(
+    (base64: string) => { if (!isSpeakingRef.current) sendAudio(base64); },
+    [sendAudio]
+  );
+
+  // Send video frames to Gemini while connected and camera is active
+  const captureFrameRef = useRef(captureFrame);
+  captureFrameRef.current = captureFrame;
+  const sendVideoFrameRef = useRef(sendVideoFrame);
+  sendVideoFrameRef.current = sendVideoFrame;
 
   useEffect(() => {
-    if (connectionState !== 'connected') {
-      setLatencyMs(null);
-      return;
+    if (connectionState !== 'connected' || !isCameraOn) return;
+    const interval = setInterval(() => {
+      const frame = captureFrameRef.current();
+      if (frame) sendVideoFrameRef.current(frame);
+    }, 500); // 2 fps — good balance of visual context vs bandwidth
+    return () => clearInterval(interval);
+  }, [connectionState, isCameraOn]);
+
+  // Restart mic + camera whenever the WS connection (re-)establishes —
+  // covers both the initial connect and background auto-reconnects.
+  useEffect(() => {
+    if (connectionState === 'connected') {
+      if (!isCameraOn) startCamera();
+      if (!isMicOn)    startMic(sendAudioGated);
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [connectionState]); // intentionally omit stable refs to avoid double-start
 
-    const timer = window.setInterval(() => {
-      setLatencyMs(Math.floor(40 + Math.random() * 90));
-    }, 1500);
+  const handleSessionToggle = () => {
+    if (connectionState === 'connected') {
+      disconnect();
+      stopCamera();
+      stopMic();
+    } else if (connectionState !== 'connecting') {
+      // Works from any non-active state: disconnected, error, reconnecting
+      connect(cloudRunUrl, language);
+      startCamera();
+      startMic(sendAudioGated);
+    }
+  };
 
-    return () => {
-      window.clearInterval(timer);
-    };
-  }, [connectionState]);
+  const clearSession = () => {
+    // This should be implemented in useGeminiLive, but for now we'll do it here
+    // setTriageCards([]);
+    // setSessionLog([]);
+  };
 
-  // ── Session lifecycle ───────────────────────────────────────────────────────
+  const mappedSessionLog = useMemo((): LogEntry[] => {
+    return sessionLog.map((entry: SessionLogEntry) => ({
+      type: entry.type === 'system' ? 'info' : entry.type === 'transcript' ? 'user' : entry.type,
+      message: entry.content,
+      timestamp: new Date(entry.ts).toISOString(),
+    }));
+  }, [sessionLog]);
 
-  const handleStartSession = useCallback(async () => {
-    setIsSessionActive(true);
-    connect(cloudRunUrl, selectedLanguage);
-    await startRecording(sendAudio);
-  }, [cloudRunUrl, connect, selectedLanguage, startRecording, sendAudio]);
-
-  const handleEndSession = useCallback(() => {
-    stopRecording();
-    disconnect();
-    setIsSessionActive(false);
-  }, [stopRecording, disconnect]);
-
-  // ── Download session report ─────────────────────────────────────────────────
-
-  const handleDownloadReport = useCallback(() => {
+  const handleDownloadReport = () => {
     const report = {
-      generated_at: new Date().toISOString(),
-      language: selectedLanguage,
-      transcript,
+      session_start: mappedSessionLog.find(e => e.type === 'info')?.timestamp,
+      session_end: new Date().toISOString(),
+      language,
       triage_cards: triageCards,
-      session_log: sessionLog,
+      full_log: mappedSessionLog,
     };
-    const blob = new Blob([JSON.stringify(report, null, 2)], {
-      type: 'application/json',
-    });
+    const blob = new Blob([JSON.stringify(report, null, 2)], { type: 'application/json' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = `medvision-session-${Date.now()}.json`;
+    a.download = `medvision_report_${new Date().toISOString()}.json`;
     a.click();
     URL.revokeObjectURL(url);
-  }, [transcript, triageCards, sessionLog, selectedLanguage]);
+  };
 
-  // ── Render ──────────────────────────────────────────────────────────────────
+  // Mock latency
+  const latency = connectionState === 'connected' ? Math.floor(Math.random() * 50) + 20 : 0;
 
   return (
-    <div className="h-screen overflow-hidden bg-[#0A0A0F] text-[#F1F5F9]">
-      <header className="h-12 border-b border-white/10 bg-[#0D0E15] px-4">
-        <div className="mx-auto flex h-full max-w-[1920px] items-center justify-between">
-          <div className="flex items-center gap-3">
-            <div className="flex h-7 w-7 items-center justify-center rounded-md border border-white/15 bg-[#EF4444] text-white">
-              <svg className="h-4 w-4" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
-                <path d="M9 4h2v5h5v2h-5v5H9v-5H4V9h5V4z" />
-              </svg>
-            </div>
-            <p className="text-base font-bold text-[#F1F5F9]">MedVision</p>
-            <p className="text-xs font-medium text-[#64748B]">v1.0</p>
-          </div>
-
-          <p className="hidden text-[11px] uppercase tracking-[0.2em] text-[#64748B] md:block">
-            Emergency Medical AI Agent
-          </p>
-
-          <div className="flex items-center gap-2">
-            <span className="rounded-md border border-white/10 bg-[#12121A] px-2 py-1 text-[10px] font-semibold uppercase tracking-wide text-[#94A3B8]">
-              {REGION}
-            </span>
-            <span className="rounded-md border border-white/10 bg-[#12121A] px-2 py-1 text-[10px] font-semibold text-[#94A3B8]">
-              {latencyMs ? `${latencyMs} ms` : '-- ms'}
-            </span>
-          </div>
-        </div>
-      </header>
-
-      <main className="mx-auto grid h-[calc(100vh-48px)] max-w-[1920px] grid-cols-1 gap-4 overflow-y-auto p-4 md:grid-cols-[320px_1fr_300px] md:overflow-hidden">
-        <aside className="min-h-0">
-          <CameraFeed
-            isSessionActive={isSessionActive}
-            onFrame={sendVideoFrame}
-            isAudioOn={isRecording || !audioError}
-          />
-          {audioError && (
-            <p className="mt-3 rounded-xl border border-red-500/30 bg-red-500/10 px-3 py-2 text-xs text-red-300">
-              {audioError}
-            </p>
-          )}
-        </aside>
-
-        <section className="grid min-h-0 grid-rows-[1fr_1fr] gap-4 overflow-hidden">
-          <AgentVoiceBar
-            isSpeaking={isSpeaking}
-            audioLevel={audioLevel}
-            transcript={transcript}
-            partialTranscript={partialTranscript}
-            showInterrupt={isSessionActive}
-            onInterrupt={interrupt}
-          />
-
-          <div className="flex min-h-0 flex-col rounded-xl border border-white/10 bg-[#12121A] p-4">
-            <div className="mb-3 flex items-center justify-between">
-              <p className="text-xs font-semibold uppercase tracking-[0.18em] text-[#94A3B8]">
-                Triage Cards
-              </p>
-              <span className="rounded-full border border-white/10 bg-[#0A0A0F] px-2 py-0.5 text-xs text-[#F1F5F9]">
-                {triageCards.length}
-              </span>
-            </div>
-
-            <div className="flex min-h-0 flex-col gap-3 overflow-y-auto pr-1">
-              {triageCards.length === 0 && (
-                <div className="flex h-full items-center justify-center rounded-lg border border-dashed border-white/10 bg-[#0E1017] px-4 text-center text-sm text-[#64748B]">
-                  Incoming AI triage cards will appear here.
-                </div>
-              )}
-              {triageCards.map(card => (
-                <TriageCardComponent key={`${card.condition}-${card.timestamp}`} card={card} />
-              ))}
-            </div>
-          </div>
-        </section>
-
-        <aside className="grid min-h-0 grid-rows-[auto_auto_1fr] gap-4 overflow-hidden">
-          <StatusBar connectionState={connectionState} />
-
-          <div className="rounded-xl border border-white/10 bg-[#12121A] p-4">
-            <button
-              onClick={isSessionActive ? handleEndSession : () => void handleStartSession()}
-              className={`mb-4 w-full rounded-lg px-4 py-4 text-sm font-extrabold uppercase tracking-[0.08em] transition ${
-                isSessionActive
-                  ? 'border border-[#EF4444] bg-[#1A1012] text-[#F1F5F9] shadow-[0_0_0_1px_rgba(239,68,68,0.7),0_0_24px_rgba(239,68,68,0.25)] animate-[sessionPulse_1.4s_ease-in-out_infinite]'
-                  : 'border border-white/10 bg-[#1C1D27] text-[#F1F5F9] hover:border-white/20'
-              }`}
-            >
-              {isSessionActive ? 'End Session' : 'Start Session'}
-            </button>
-
-            <label htmlFor="language-select" className="mb-1 block text-[11px] uppercase tracking-[0.16em] text-[#64748B]">
-              Language
-            </label>
-            <select
-              id="language-select"
-              value={selectedLanguage}
-              onChange={e => setSelectedLanguage(e.target.value)}
-              disabled={isSessionActive}
-              className="mb-3 w-full appearance-none rounded-lg border border-white/10 bg-[#0E1017] px-3 py-2 text-sm text-[#F1F5F9] outline-none transition focus:border-[#F97316] disabled:cursor-not-allowed disabled:opacity-60"
-            >
-              {LANGUAGES.map(lang => (
-                <option key={lang.code} value={lang.code}>
-                  {lang.label}
-                </option>
-              ))}
-            </select>
-
-            <label htmlFor="cloud-run-url" className="mb-1 block text-[11px] uppercase tracking-[0.16em] text-[#64748B]">
-              Cloud Run URL
-            </label>
-            <input
-              id="cloud-run-url"
-              value={cloudRunUrl}
-              onChange={e => setCloudRunUrl(e.target.value)}
-              disabled={isSessionActive}
-              className="w-full rounded-lg border border-white/10 bg-[#0E1017] px-3 py-2 text-xs text-[#94A3B8] outline-none transition placeholder:text-[#475569] focus:border-[#F97316] disabled:cursor-not-allowed disabled:opacity-60"
-              placeholder="https://medvision-xxxx-uc.a.run.app"
-            />
-          </div>
-
-          <SessionLog entries={sessionLog} onDownload={handleDownloadReport} />
-        </aside>
+    <div className="flex flex-col h-screen bg-[#0A0A0F] text-slate-100 font-sans overflow-hidden">
+      <AppHeader connectionState={connectionState} latency={latency} />
+      <main className="grid flex-1 grid-cols-1 gap-3 p-3 lg:grid-cols-[320px_1fr_280px] overflow-hidden">
+        <LeftPanel isCameraOn={isCameraOn} isMicOn={isMicOn} videoRef={videoRef} />
+        <CenterPanel
+          isSpeaking={isSpeaking}
+          transcript={transcript}
+          partialTranscript={partialTranscript}
+          userTranscript={userTranscript}
+          triageCards={triageCards}
+          isConnected={connectionState === 'connected'}
+          onInterrupt={interrupt}
+        />
+        <RightPanel
+          connectionState={connectionState}
+          onSessionToggle={handleSessionToggle}
+          language={language}
+          onLanguageChange={setLanguage}
+          cloudRunUrl={cloudRunUrl}
+          onCloudRunUrlChange={setCloudRunUrl}
+          sessionLog={mappedSessionLog}
+          onClearLog={clearSession}
+          onDownloadReport={handleDownloadReport}
+        />
       </main>
     </div>
   );
 }
+
+// --- Sub-components for layout ---
+
+const AppHeader = ({ connectionState, latency }: { connectionState: string; latency: number }) => (
+  <header className="flex items-center justify-between h-12 px-4 border-b border-[rgba(255,255,255,0.08)] shrink-0">
+    <div className="flex items-center gap-2">
+      <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#EF4444" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+        <path d="M12 5v14M5 12h14" />
+      </svg>
+      <h1 className="text-lg font-bold text-white">MedVision</h1>
+      <span className="text-xs text-slate-500">v1.0</span>
+    </div>
+    <div className="hidden md:block">
+      <p className="text-xs tracking-widest text-gray-500 uppercase">Emergency Medical AI Agent</p>
+    </div>
+    <div className="flex items-center gap-2">
+      <StatusBar connectionState={connectionState} />
+      <span className="text-xs text-slate-400">{latency > 0 ? `${latency}ms` : '...'}</span>
+    </div>
+  </header>
+);
+
+const LeftPanel = ({ isCameraOn, isMicOn, videoRef }: { isCameraOn: boolean; isMicOn: boolean; videoRef: React.RefObject<HTMLVideoElement> }) => (
+  <div className="flex-col hidden gap-3 lg:flex">
+    <div className="flex-1 card">
+      <CameraFeed videoRef={videoRef} />
+    </div>
+    <div className="flex items-center justify-around p-2 card">
+      <StatusPill label="VISION" active={isCameraOn} />
+      <StatusPill label="AUDIO" active={isMicOn} />
+      <StatusPill label="GROUNDED" active={true} />
+    </div>
+  </div>
+);
+
+const CenterPanel = ({ isSpeaking, transcript, partialTranscript, userTranscript, triageCards, isConnected, onInterrupt }: { isSpeaking: boolean; transcript: string; partialTranscript: string; userTranscript: string; triageCards: TriageData[]; isConnected: boolean; onInterrupt: () => void; }) => (
+  <div className="relative flex flex-col gap-3 overflow-hidden">
+    <div className="flex flex-col flex-1 gap-3 p-4 card overflow-hidden">
+      <div className="flex items-center justify-between">
+        <h2 className="text-sm font-semibold text-slate-300">CONVERSATION</h2>
+        {isSpeaking && (
+          <div className="flex items-center gap-2">
+            <span className="relative flex w-2 h-2">
+              <span className="absolute inline-flex w-full h-full bg-red-500 rounded-full opacity-75 animate-ping"></span>
+              <span className="relative inline-flex w-2 h-2 bg-red-600 rounded-full"></span>
+            </span>
+            <span className="text-xs font-semibold tracking-wider text-red-500">SPEAKING</span>
+          </div>
+        )}
+      </div>
+      <AgentVoiceBar isSpeaking={isSpeaking} />
+      {/* User's voice query */}
+      {userTranscript && (
+        <div className="px-3 py-2 rounded-lg bg-slate-800/60 border border-slate-700/50">
+          <p className="text-xs text-slate-400 mb-1">YOU</p>
+          <p className="text-sm text-slate-200">{userTranscript}</p>
+        </div>
+      )}
+      {/* Agent's response — show partial (rolling) while speaking, final when done */}
+      <div className="flex-1 overflow-y-auto">
+        <p className="text-xs text-slate-400 mb-1">MEDVISION</p>
+        <p className="text-base text-slate-100">
+          {isSpeaking && partialTranscript ? partialTranscript : (transcript || '…')}
+        </p>
+      </div>
+    </div>
+    <div className="flex flex-col flex-1 gap-3 p-4 overflow-hidden card">
+      <div className="flex items-center justify-between">
+        <h2 className="text-sm font-semibold text-slate-300">TRIAGE CARDS</h2>
+        {triageCards.length > 0 && (
+          <div className="flex items-center justify-center w-5 h-5 text-xs font-bold text-white bg-red-600 rounded-full">
+            {triageCards.length}
+          </div>
+        )}
+      </div>
+      <div className="flex-1 overflow-y-auto">
+        {triageCards.length === 0 ? (
+          <div className="flex items-center justify-center h-full border-2 border-dashed rounded-lg border-slate-700">
+            <p className="text-sm text-slate-500">Triage cards will appear here</p>
+          </div>
+        ) : (
+          <div className="space-y-3">
+            {triageCards.map((card, index) => (
+              <TriageCard key={index} card={card} className="slide-up" style={{ animationDelay: `${index * 100}ms` }} />
+            ))}
+          </div>
+        )}
+      </div>
+    </div>
+    {isConnected && isSpeaking && (
+      <button
+        onClick={onInterrupt}
+        className="absolute bottom-0 w-full py-3 text-base font-bold text-white transition-colors bg-red-600 btn hover:bg-red-700 active:bg-red-800"
+      >
+        INTERRUPT AGENT
+      </button>
+    )}
+  </div>
+);
+
+const RightPanel = ({
+  connectionState, onSessionToggle, language, onLanguageChange, cloudRunUrl, onCloudRunUrlChange, sessionLog, onClearLog, onDownloadReport
+}: {
+  connectionState: string; onSessionToggle: () => void; language: string; onLanguageChange: (lang: string) => void; cloudRunUrl: string; onCloudRunUrlChange: (url: string) => void; sessionLog: LogEntry[]; onClearLog: () => void; onDownloadReport: () => void;
+}) => {
+  const sessionButtonContent = useMemo(() => {
+    switch (connectionState) {
+      case 'connecting':
+        return <><Spinner /> CONNECTING...</>;
+      case 'connected':
+        return 'END SESSION';
+      default:
+        return 'START SESSION';
+    }
+  }, [connectionState]);
+
+  const sessionButtonClass = useMemo(() => {
+    switch (connectionState) {
+      case 'connected':
+        return 'btn-danger relative';
+      default:
+        return 'btn-secondary';
+    }
+  }, [connectionState]);
+
+  return (
+    <div className="flex flex-col gap-3">
+      <div className="p-4 card">
+        <button
+          onClick={onSessionToggle}
+          disabled={connectionState === 'connecting'}
+          className={`w-full btn flex items-center justify-center gap-2 ${sessionButtonClass}`}
+        >
+          {connectionState === 'connected' && <div className="absolute w-full h-full rounded-md pulse-ring bg-red-500/50" />}
+          {sessionButtonContent}
+        </button>
+        <LanguageSelector value={language} onChange={onLanguageChange} disabled={connectionState !== 'disconnected'} />
+      </div>
+      <div className="p-4 card">
+        <label htmlFor="cloud-run-url" className="block mb-1 text-xs text-slate-400">Backend URL</label>
+        <input
+          id="cloud-run-url"
+          type="text"
+          value={cloudRunUrl}
+          onChange={(e) => onCloudRunUrlChange(e.target.value)}
+          className="input-dark"
+          disabled={connectionState !== 'disconnected'}
+        />
+      </div>
+      <div className="flex flex-col flex-1 p-4 overflow-hidden card">
+        <div className="flex items-center justify-between mb-2">
+          <h2 className="text-sm font-semibold text-slate-300">SESSION LOG</h2>
+          <button onClick={onClearLog} className="text-xs text-slate-500 hover:text-slate-300">Clear</button>
+        </div>
+        <div className="flex-1 overflow-y-auto">
+          <SessionLog log={sessionLog} />
+        </div>
+        <button onClick={onDownloadReport} className="w-full mt-2 btn btn-secondary">
+          DOWNLOAD REPORT
+        </button>
+      </div>
+    </div>
+  );
+};
+
+// --- Helper Components ---
+
+const StatusPill = ({ label, active }: { label: string; active: boolean }) => (
+  <div className="flex items-center gap-2 px-3 py-1 text-xs font-semibold rounded-full bg-slate-800 text-slate-300">
+    <div className={`w-2 h-2 rounded-full ${active ? 'bg-green-500' : 'bg-slate-600'}`} />
+    {label}
+  </div>
+);
+
+const LanguageSelector = ({ value, onChange, disabled }: { value: string; onChange: (lang: string) => void; disabled: boolean }) => {
+  const languages = {
+    'en': 'English', 'es': 'Español', 'fr': 'Français', 'ar': 'العربية', 'hi': 'हिन्दी',
+    'zh': '中文', 'sw': 'Kiswahili', 'ta': 'தமிழ்', 'pt': 'Português', 'ru': 'Русский'
+  };
+
+  return (
+    <div className="relative mt-2">
+      <select
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        disabled={disabled}
+        className="w-full px-3 py-2 text-sm bg-gray-900 border border-gray-700 rounded-md appearance-none focus:outline-none focus:ring-1 focus:ring-red-500 disabled:opacity-50"
+      >
+        {Object.entries(languages).map(([code, name]) => (
+          <option key={code} value={code}>{name}</option>
+        ))}
+      </select>
+      <div className="absolute inset-y-0 right-0 flex items-center px-2 pointer-events-none">
+        <svg className="w-4 h-4 fill-current text-slate-500" viewBox="0 0 20 20"><path d="M5.293 7.293a1 1 0 011.414 0L10 10.586l3.293-3.293a1 1 0 111.414 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 010-1.414z" /></svg>
+      </div>
+    </div>
+  );
+};
+
+const Spinner = () => (
+  <svg className="w-4 h-4 text-white animate-spin" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+  </svg>
+);
