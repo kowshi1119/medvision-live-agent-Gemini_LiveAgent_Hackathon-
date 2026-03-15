@@ -8,6 +8,13 @@ REGION="us-central1"
 SERVICE_NAME="medvision"
 IMAGE="gcr.io/${PROJECT_ID}/${SERVICE_NAME}"
 
+# GEMINI_API_KEY must be set in the shell before running this script
+if [[ -z "${GEMINI_API_KEY:-}" ]]; then
+  echo "ERROR: GEMINI_API_KEY is not set."
+  echo "  export GEMINI_API_KEY=your_key_from_aistudio.google.com"
+  exit 1
+fi
+
 echo "========================================"
 echo "  Deploying MedVision"
 echo "  Project : ${PROJECT_ID}"
@@ -18,26 +25,22 @@ echo "========================================"
 echo "→ Enabling GCP services…"
 gcloud services enable \
   run.googleapis.com \
-  firestore.googleapis.com \
-  storage.googleapis.com \
   cloudbuild.googleapis.com \
   logging.googleapis.com \
+  secretmanager.googleapis.com \
   --project="${PROJECT_ID}"
 
-# Create Firestore database in native mode if it doesn't exist
-echo "→ Ensuring Firestore database exists…"
-gcloud firestore databases create \
-  --location="${REGION}" \
-  --project="${PROJECT_ID}" 2>/dev/null || echo "   (Firestore already exists)"
-
-# Create session logs bucket if it doesn't exist
-BUCKET_NAME="medvision-session-logs-${PROJECT_ID}"
-echo "→ Ensuring GCS bucket ${BUCKET_NAME} exists…"
-gsutil mb -p "${PROJECT_ID}" -l US "gs://${BUCKET_NAME}" 2>/dev/null || echo "   (Bucket already exists)"
-
-# Seed Firestore with WHO protocols
-echo "→ Seeding Firestore WHO protocols…"
-GOOGLE_CLOUD_PROJECT="${PROJECT_ID}" python seed_firestore.py
+# Create or update GEMINI_API_KEY secret in Secret Manager
+echo "→ Uploading GEMINI_API_KEY to Secret Manager…"
+if gcloud secrets describe gemini-api-key --project="${PROJECT_ID}" &>/dev/null; then
+  echo -n "${GEMINI_API_KEY}" | gcloud secrets versions add gemini-api-key \
+    --data-file=- --project="${PROJECT_ID}"
+  echo "   (secret updated)"
+else
+  echo -n "${GEMINI_API_KEY}" | gcloud secrets create gemini-api-key \
+    --data-file=- --replication-policy=automatic --project="${PROJECT_ID}"
+  echo "   (secret created)"
+fi
 
 # Build and push Docker image to Container Registry
 echo "→ Building container image…"
@@ -58,6 +61,7 @@ gcloud run deploy "${SERVICE_NAME}" \
   --max-instances 10 \
   --timeout 3600 \
   --set-env-vars "GOOGLE_CLOUD_PROJECT=${PROJECT_ID},GOOGLE_CLOUD_LOCATION=${REGION}" \
+  --set-secrets "GEMINI_API_KEY=gemini-api-key:latest" \
   --project="${PROJECT_ID}"
 
 echo ""

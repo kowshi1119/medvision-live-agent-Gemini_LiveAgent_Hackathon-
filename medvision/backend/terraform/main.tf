@@ -56,6 +56,11 @@ resource "google_project_service" "logging" {
   disable_on_destroy = false
 }
 
+resource "google_project_service" "secretmanager" {
+  service            = "secretmanager.googleapis.com"
+  disable_on_destroy = false
+}
+
 # ── Firestore ─────────────────────────────────────────────────────────────────
 
 resource "google_firestore_database" "default" {
@@ -124,6 +129,26 @@ resource "google_project_iam_member" "aiplatform_user" {
   member  = "serviceAccount:${google_service_account.medvision.email}"
 }
 
+# ── Secret Manager — GEMINI_API_KEY ───────────────────────────────────────────
+# The secret shell is created here; the actual value must be uploaded once:
+#   echo -n "YOUR_KEY" | gcloud secrets versions add gemini-api-key --data-file=- --project=PROJECT_ID
+
+resource "google_secret_manager_secret" "gemini_api_key" {
+  secret_id = "gemini-api-key"
+
+  replication {
+    auto {}
+  }
+
+  depends_on = [google_project_service.secretmanager]
+}
+
+resource "google_secret_manager_secret_iam_member" "medvision_sa_access" {
+  secret_id = google_secret_manager_secret.gemini_api_key.id
+  role      = "roles/secretmanager.secretAccessor"
+  member    = "serviceAccount:${google_service_account.medvision.email}"
+}
+
 # ── Cloud Run ─────────────────────────────────────────────────────────────────
 
 resource "google_cloud_run_v2_service" "medvision" {
@@ -165,6 +190,17 @@ resource "google_cloud_run_v2_service" "medvision" {
         value = google_storage_bucket.session_logs.name
       }
 
+      # GEMINI_API_KEY injected at runtime from Secret Manager
+      env {
+        name = "GEMINI_API_KEY"
+        value_source {
+          secret_key_ref {
+            secret  = google_secret_manager_secret.gemini_api_key.secret_id
+            version = "latest"
+          }
+        }
+      }
+
       liveness_probe {
         http_get {
           path = "/health"
@@ -193,6 +229,7 @@ resource "google_cloud_run_v2_service" "medvision" {
     google_project_service.run,
     google_firestore_database.default,
     google_storage_bucket.session_logs,
+    google_secret_manager_secret_iam_member.medvision_sa_access,
   ]
 }
 
