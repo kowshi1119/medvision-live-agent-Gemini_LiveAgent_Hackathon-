@@ -34,6 +34,8 @@ export interface UseGeminiLiveReturn {
   triageCards: TriageCard[];
   sessionLog: SessionLogEntry[];
   audioLevel: number;
+  /** Ref updated on every agent audio chunk — use for echo-gate logic */
+  lastAgentChunkTs: React.MutableRefObject<number>;
   connect: (cloudRunUrl: string, language: string) => void;
   disconnect: () => void;
   interrupt: () => void;
@@ -116,6 +118,8 @@ export function useGeminiLive(): UseGeminiLiveReturn {
   const mountedRef = useRef(true);
   const logIdRef = useRef(0);
   const speakingWatchdogRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  /** Stamped on every agent audio chunk — exported for echo-gate logic in App */
+  const lastAgentChunkTs = useRef<number>(0);
 
   const [connectionState, setConnectionState] = useState<ConnectionState>('disconnected');
   const [isSpeaking, setIsSpeaking] = useState(false);
@@ -221,6 +225,8 @@ export function useGeminiLive(): UseGeminiLiveReturn {
 
           case 'audio_chunk': {
             const chunkData = msg.data as string;
+            // Stamp BEFORE playing so the gate is re-armed on every chunk
+            lastAgentChunkTs.current = Date.now();
             audioPlayer.play(
               chunkData,
               () => { if (mountedRef.current) setIsSpeaking(true); },
@@ -385,6 +391,7 @@ export function useGeminiLive(): UseGeminiLiveReturn {
     triageCards,
     sessionLog,
     audioLevel,
+    lastAgentChunkTs,
     connect,
     disconnect,
     interrupt,

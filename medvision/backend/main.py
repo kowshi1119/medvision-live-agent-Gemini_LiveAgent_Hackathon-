@@ -124,69 +124,20 @@ async def websocket_endpoint(websocket: WebSocket):
             logger.info("Gemini Live session connected OK")
             await websocket.send_json({"type": "status", "data": "gemini_connected"})
 
-            # ── Phase 1: Proactive greeting ─────────────────────────────────────
-            # Send a kick-start text BEFORE the bidirectional audio loop so there is
-            # no race with send_realtime_input audio.  We collect the greeting
-            # response ourselves and stream audio/transcript back to the browser.
-            # Stale audio_chunk messages that arrived during this phase are
-            # silently discarded (they are ambient mic noise, not intentional speech).
+            # Fire the greeting as a single text turn BEFORE asyncio.gather so
+            # receive_from_gemini() is the ONLY consumer of gemini_session.receive().
+            # We do NOT await the response here — it arrives via receive_from_gemini().
             try:
                 await gemini_session.send_client_content(
                     turns=[types.Content(
                         role="user",
-                        parts=[types.Part(text="Hello. You are now connected. Please briefly greet the first responder and confirm you are ready to assist.")],
+                        parts=[types.Part(text="Session started. Briefly introduce yourself as MedVision and confirm you are ready to assist.")],
                     )],
                     turn_complete=True,
                 )
-                logger.info("Greeting sent to Gemini — waiting for response…")
-
-                # Collect greeting response and forward it to the browser
-                async for response in gemini_session.receive():
-                    try:
-                        if response.server_content:
-                            sc = response.server_content
-                            if sc.model_turn:
-                                for part in sc.model_turn.parts:
-                                    if getattr(part, "inline_data", None) and part.inline_data.data:
-                                        await websocket.send_json({
-                                            "type": "audio_chunk",
-                                            "data": base64.b64encode(part.inline_data.data).decode(),
-                                        })
-                            ot = getattr(sc, "output_transcription", None)
-                            if ot and getattr(ot, "text", None):
-                                clean = parser.clean(ot.text)
-                                if clean.strip():
-                                    await websocket.send_json({"type": "transcript", "data": clean})
-                                    logger.info("Greeting transcript: %s", clean[:80])
-                            if sc.turn_complete:
-                                await websocket.send_json({"type": "status", "data": "turn_complete"})
-                                logger.info("Greeting complete — entering bidirectional loop")
-                                break
-                    except Exception as greet_msg_exc:
-                        logger.warning("Greeting message error (continuing): %s", greet_msg_exc)
-
-                # Drain stale audio_chunk / video_frame messages the frontend sent
-                # while we were generating the greeting.  We cannot forward them
-                # because they are ambient noise and will confuse Gemini's VAD.
-                drained = 0
-                while True:
-                    try:
-                        stale = await asyncio.wait_for(websocket.receive_text(), timeout=0.05)
-                        stale_msg = json.loads(stale)
-                        if stale_msg.get("type") in ("audio_chunk", "video_frame"):
-                            drained += 1
-                        else:
-                            # Non-media message (e.g. end_session) — handle it
-                            if stale_msg.get("type") == "end_session":
-                                logger.info("end_session received during drain — closing")
-                                return
-                    except (asyncio.TimeoutError, Exception):
-                        break
-                if drained:
-                    logger.info("Drained %d stale media messages before bidirectional loop", drained)
-
+                logger.info("Greeting fired — starting bidirectional loop")
             except Exception as greet_exc:
-                logger.warning("Greeting phase failed (%s) — continuing to bidirectional loop", greet_exc)
+                logger.warning("Greeting failed (%s) — continuing without it", greet_exc)
 
             await websocket.send_json({"type": "status", "data": "Agent connected and ready"})
 
