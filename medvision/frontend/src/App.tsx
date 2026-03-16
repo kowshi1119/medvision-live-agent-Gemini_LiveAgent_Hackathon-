@@ -75,6 +75,10 @@ export default function App() {
   const { videoRef, isActive: isCameraOn, startCamera, stopCamera, captureFrame } = useCamera();
   const { isRecording: isMicOn, error: audioError, startRecording: startMic, stopRecording: stopMic } = useAudio();
 
+  // Flashes true for 150 ms every time a video frame is transmitted to Gemini
+  const [isCapturing, setIsCapturing] = useState(false);
+  const captureFlashRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
   const handleSessionToggle = () => {
     if (connectionState === 'connected') {
       disconnect();
@@ -92,14 +96,22 @@ export default function App() {
     }
   }, [connectionState, isMicOn, startCamera, startMic, sendAudioGated]);
 
-  // Send video frames at 2 fps when connected
+  // Send video frames at 2 fps when connected; flash the capture indicator each time
   useEffect(() => {
     if (connectionState !== 'connected') return;
     const interval = setInterval(() => {
       const frame = captureFrame();
-      if (frame) sendVideoFrame(frame);
+      if (frame) {
+        sendVideoFrame(frame);
+        setIsCapturing(true);
+        if (captureFlashRef.current) clearTimeout(captureFlashRef.current);
+        captureFlashRef.current = setTimeout(() => setIsCapturing(false), 150);
+      }
     }, 500);
-    return () => clearInterval(interval);
+    return () => {
+      clearInterval(interval);
+      if (captureFlashRef.current) clearTimeout(captureFlashRef.current);
+    };
   }, [connectionState, captureFrame, sendVideoFrame]);
 
   const mappedSessionLog = useMemo((): LogEntry[] =>
@@ -151,7 +163,7 @@ export default function App() {
     <div className="flex flex-col h-screen bg-[#0A0A0F] text-slate-100 font-sans overflow-hidden">
       <AppHeader connectionState={connectionState} />
       <main className="grid flex-1 grid-cols-1 gap-4 p-4 lg:grid-cols-[340px_1fr_320px] overflow-hidden">
-        <LeftPanel isCameraOn={isCameraOn} isMicOn={isMicOn} micMuted={micMuted} onToggleMic={() => setMicMuted(m => !m)} connectionState={connectionState} videoRef={videoRef} audioError={audioError} />
+        <LeftPanel isCameraOn={isCameraOn} isMicOn={isMicOn} micMuted={micMuted} onToggleMic={() => setMicMuted(m => !m)} connectionState={connectionState} videoRef={videoRef} audioError={audioError} isCapturing={isCapturing} />
         <CenterPanel isSpeaking={isSpeaking} transcript={transcript} triageCards={triageCards} isConnected={connectionState === 'connected'} onInterrupt={interrupt} />
         <RightPanel
           connectionState={connectionState}
@@ -170,10 +182,10 @@ export default function App() {
 
 // --- Layout Components ---
 
-const LeftPanel = ({ isCameraOn, isMicOn, micMuted, onToggleMic, connectionState, videoRef, audioError }: { isCameraOn: boolean; isMicOn: boolean; micMuted: boolean; onToggleMic: () => void; connectionState: string; videoRef: React.RefObject<HTMLVideoElement>; audioError: string | null }) => (
+const LeftPanel = ({ isCameraOn, isMicOn, micMuted, onToggleMic, connectionState, videoRef, audioError, isCapturing }: { isCameraOn: boolean; isMicOn: boolean; micMuted: boolean; onToggleMic: () => void; connectionState: string; videoRef: React.RefObject<HTMLVideoElement>; audioError: string | null; isCapturing: boolean }) => (
   <div className="flex flex-col gap-4">
     <div className="flex-1 card overflow-hidden">
-      <CameraFeed videoRef={videoRef} />
+      <CameraFeed videoRef={videoRef} isCapturing={isCapturing} isConnected={connectionState === 'connected'} />
     </div>
     <div className="grid grid-cols-3 gap-2">
       <StatusPill icon={<Eye size={14} />} label="VISION" active={isCameraOn} />

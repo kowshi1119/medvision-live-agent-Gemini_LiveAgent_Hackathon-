@@ -28,11 +28,12 @@ export function useCamera(): UseCameraReturn {
   const startCamera = useCallback(async () => {
     setError(null);
     try {
+      // 'user' = front-facing / webcam — the person showing symptoms faces the camera
       const stream = await navigator.mediaDevices.getUserMedia({
         video: {
-          width: { ideal: 640 },
-          height: { ideal: 480 },
-          facingMode: 'environment', // Prefer rear camera on mobile
+          width: { ideal: 1280 },
+          height: { ideal: 720 },
+          facingMode: 'user',
         },
         audio: false,
       });
@@ -75,8 +76,13 @@ export function useCamera(): UseCameraReturn {
     if (!video || !isActive || video.videoWidth === 0) return null;
 
     const canvas = getCanvas();
-    canvas.width = video.videoWidth;
-    canvas.height = video.videoHeight;
+
+    // Cap at 640×480 so frames are compact enough for Gemini's live input
+    const MAX_W = 640;
+    const MAX_H = 480;
+    const scale = Math.min(1, MAX_W / video.videoWidth, MAX_H / video.videoHeight);
+    canvas.width  = Math.round(video.videoWidth  * scale);
+    canvas.height = Math.round(video.videoHeight * scale);
 
     const ctx = canvas.getContext('2d');
     if (!ctx) return null;
