@@ -140,7 +140,7 @@ export default function App() {
     URL.revokeObjectURL(url);
   };
 
-  const AppHeader = ({ connectionState }: { connectionState: string }) => (
+  const AppHeader = ({ connectionState, onSessionToggle }: { connectionState: string; onSessionToggle: () => void }) => (
     <header className="flex items-center justify-between h-14 px-4 border-b border-white/10 shrink-0">
       <div className="flex items-center gap-3">
         <div className="w-8 h-8 flex items-center justify-center bg-red-600/20 rounded-full border border-red-600">
@@ -151,7 +151,23 @@ export default function App() {
       <div className="hidden md:block">
         <p className="text-sm tracking-wider text-gray-400">MEDICAL COMMAND CENTER</p>
       </div>
-      <div className="flex items-center gap-4">
+      <div className="flex items-center gap-3">
+        {/* Always-visible session toggle — works at any screen size / zoom */}
+        <button
+          onClick={onSessionToggle}
+          disabled={connectionState === 'connecting'}
+          className={`relative flex items-center gap-2 px-4 py-1.5 rounded-md text-sm font-semibold transition-colors focus:outline-none disabled:opacity-50 ${
+            connectionState === 'connected'
+              ? 'bg-red-900 text-red-200 border border-red-700 hover:bg-red-800'
+              : 'bg-red-600 text-white hover:bg-red-700 shadow-[0_0_12px_rgba(239,68,68,0.4)]'
+          }`}
+        >
+          {connectionState === 'connecting' && <Spinner />}
+          {connectionState === 'connected'
+            ? <><PhoneOff size={14} className="mr-1" />END SESSION</>
+            : connectionState === 'connecting' ? 'CONNECTING…'
+            : 'START SESSION'}
+        </button>
         <StatusBar connectionState={connectionState} />
         <div className="w-px h-6 bg-white/10"></div>
         <span className="text-sm font-mono text-gray-400">UTC {new Date().toISOString().substring(11, 19)}</span>
@@ -161,8 +177,8 @@ export default function App() {
 
   return (
     <div className="flex flex-col h-screen bg-[#0A0A0F] text-slate-100 font-sans overflow-hidden">
-      <AppHeader connectionState={connectionState} />
-      <main className="grid flex-1 grid-cols-1 gap-4 p-4 lg:grid-cols-[340px_1fr_320px] overflow-hidden">
+      <AppHeader connectionState={connectionState} onSessionToggle={handleSessionToggle} />
+      <main className="grid flex-1 gap-4 p-4 grid-cols-[240px_1fr_240px] lg:grid-cols-[340px_1fr_320px] overflow-hidden">
         <LeftPanel isCameraOn={isCameraOn} isMicOn={isMicOn} micMuted={micMuted} onToggleMic={() => setMicMuted(m => !m)} connectionState={connectionState} videoRef={videoRef} audioError={audioError} isCapturing={isCapturing} />
         <CenterPanel isSpeaking={isSpeaking} transcript={transcript} triageCards={triageCards} isConnected={connectionState === 'connected'} onInterrupt={interrupt} />
         <RightPanel
