@@ -41,6 +41,8 @@ export interface UseGeminiLiveReturn {
   interrupt: () => void;
   sendVideoFrame: (base64: string) => void;
   sendAudio: (base64: string) => void;
+  /** Send a plain-text message to Gemini (used for visual probe nudges) */
+  sendText: (text: string) => void;
 }
 
 // ── Constants ─────────────────────────────────────────────────────────────────
@@ -382,6 +384,12 @@ export function useGeminiLive(): UseGeminiLiveReturn {
     []
   );
 
+  const sendText = useCallback((text: string) => {
+    if (wsRef.current?.readyState === WebSocket.OPEN) {
+      wsRef.current.send(JSON.stringify({ type: 'text', data: text }));
+    }
+  }, []);
+
   return {
     connectionState,
     isSpeaking,
@@ -397,5 +405,6 @@ export function useGeminiLive(): UseGeminiLiveReturn {
     interrupt,
     sendVideoFrame,
     sendAudio,
+    sendText,
   };
 }

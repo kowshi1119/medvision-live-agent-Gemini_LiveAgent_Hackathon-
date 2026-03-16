@@ -45,6 +45,7 @@ export default function App() {
     interrupt,
     sendAudio,
     sendVideoFrame,
+    sendText,
   } = useGeminiLive();
 
   const [micMuted, setMicMuted] = useState(false);
@@ -113,6 +114,30 @@ export default function App() {
       if (captureFlashRef.current) clearTimeout(captureFlashRef.current);
     };
   }, [connectionState, captureFrame, sendVideoFrame]);
+
+  // Visual probe: every 8 s nudge Gemini to describe what it sees in the camera.
+  // This makes the agent proactively react to visual cues even without speech.
+  const visualProbeRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  useEffect(() => {
+    if (connectionState !== 'connected') {
+      if (visualProbeRef.current) { clearInterval(visualProbeRef.current); visualProbeRef.current = null; }
+      return;
+    }
+    // First probe fires 4 s after connect so greeting finishes first
+    const t = setTimeout(() => {
+      sendText('[VISUAL_CHECK] Describe briefly what you observe in the camera right now. If you see a symptom cue (hand on chest, holding head, labored breathing, slumped posture), name it and ask one focused question.');
+      visualProbeRef.current = setInterval(() => {
+        if (!isSpeakingRef.current) {
+          sendText('[VISUAL_CHECK] Look at the camera. Describe any visible symptom cue you observe right now in one sentence.');
+        }
+      }, 8000);
+    }, 4000);
+    return () => {
+      clearTimeout(t);
+      if (visualProbeRef.current) { clearInterval(visualProbeRef.current); visualProbeRef.current = null; }
+    };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [connectionState, sendText]);
 
   const mappedSessionLog = useMemo((): LogEntry[] =>
     sessionLog.map((entry: SessionLogEntry) => ({
@@ -199,8 +224,9 @@ export default function App() {
 // --- Layout Components ---
 
 const LeftPanel = ({ isCameraOn, isMicOn, micMuted, onToggleMic, connectionState, videoRef, audioError, isCapturing }: { isCameraOn: boolean; isMicOn: boolean; micMuted: boolean; onToggleMic: () => void; connectionState: string; videoRef: React.RefObject<HTMLVideoElement>; audioError: string | null; isCapturing: boolean }) => (
-  <div className="flex flex-col gap-4">
-    <div className="flex-1 card overflow-hidden">
+  <div className="flex flex-col gap-3 h-full overflow-y-auto">
+    {/* Fixed-height camera box so the rest of the panel is always reachable */}
+    <div className="shrink-0 h-48 card overflow-hidden">
       <CameraFeed videoRef={videoRef} isCapturing={isCapturing} isConnected={connectionState === 'connected'} />
     </div>
     <div className="grid grid-cols-3 gap-2">
