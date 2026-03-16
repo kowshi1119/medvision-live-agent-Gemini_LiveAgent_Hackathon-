@@ -1,13 +1,9 @@
-import type { Config } from 'tailwindcss';
-
-const config: Config = {
-  content: [
-    './index.html',
-    './src/**/*.{ts,tsx}',
-  ],
-  darkMode: 'class',
-  theme: {
-    extend: {
+import type { Config } from 'tailwindcss'
+export default {
+  content: ['./index.html', './src/**/*.{ts,tsx}'],
+  theme: { extend: {} },
+  plugins: [],
+} satisfies Config
       colors: {
         background: '#0A0A0A',
         primary: '#EF4444',

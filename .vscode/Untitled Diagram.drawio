@@ -1,0 +1,138 @@
+<mxfile host="app.diagrams.net" agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.0.0 Safari/537.36" version="29.6.1">
+  <diagram id="4JE0ElO1nM2TBNugQuw4" name="Page-1">
+    <mxGraphModel dx="512" dy="614" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1100" pageHeight="850" background="#ffffff" math="0" shadow="0">
+      <root>
+        <mxCell id="0" />
+        <mxCell id="1" parent="0" />
+        <mxCell id="title" parent="1" style="text;html=1;strokeColor=none;fillColor=none;align=center;verticalAlign=middle;whiteSpace=wrap;rounded=0;fontSize=24;fontStyle=1" value="MedVision Architecture - Real-time Gemini Live Agent on Google Cloud" vertex="1">
+          <mxGeometry height="40" width="700" x="200" y="20" as="geometry" />
+        </mxCell>
+        <mxCell id="zone1" parent="1" style="swimlane;whiteSpace=wrap;html=1;fillColor=#f5f5f5;fontStyle=1;startSize=30;" value="Frontend (User Browser)" vertex="1">
+          <mxGeometry height="560" width="240" x="40" y="100" as="geometry" />
+        </mxCell>
+        <mxCell id="fe_react" parent="zone1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;" value="React + TypeScript Web App" vertex="1">
+          <mxGeometry height="60" width="200" x="20" y="50" as="geometry" />
+        </mxCell>
+        <mxCell id="fe_media" parent="zone1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;" value="Capture Layer&#xa;(WebRTC / Web Audio PCM)" vertex="1">
+          <mxGeometry height="60" width="200" x="20" y="130" as="geometry" />
+        </mxCell>
+        <mxCell id="fe_ui" parent="zone1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;" value="Live UI Panels&#xa;(Transcript, Triage Cards,&#xa;Session Log, Controls)" vertex="1">
+          <mxGeometry height="80" width="200" x="20" y="210" as="geometry" />
+        </mxCell>
+        <mxCell id="fe_ws" parent="zone1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;fontStyle=1" value="WebSocket Client (/live)" vertex="1">
+          <mxGeometry height="60" width="200" x="20" y="480" as="geometry" />
+        </mxCell>
+        <mxCell id="zone2" parent="1" style="swimlane;whiteSpace=wrap;html=1;fillColor=#f5f5f5;fontStyle=1;startSize=30;" value="Backend (Google Cloud Run)" vertex="1">
+          <mxGeometry height="560" width="260" x="380" y="100" as="geometry" />
+        </mxCell>
+        <mxCell id="be_fastapi" parent="zone2" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;fontStyle=1" value="FastAPI + Uvicorn Service" vertex="1">
+          <mxGeometry height="60" width="200" x="30" y="50" as="geometry" />
+        </mxCell>
+        <mxCell id="be_ws_end" parent="zone2" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;" value="WebSocket Endpoint: /live" vertex="1">
+          <mxGeometry height="40" width="200" x="30" y="130" as="geometry" />
+        </mxCell>
+        <mxCell id="be_orch" parent="zone2" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;" value="Session Manager / Orchestrator" vertex="1">
+          <mxGeometry height="50" width="200" x="30" y="190" as="geometry" />
+        </mxCell>
+        <mxCell id="be_parser" parent="zone2" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;" value="Triage Card Parser&#xa;([TRIAGE_CARD] JSON)" vertex="1">
+          <mxGeometry height="50" width="200" x="30" y="260" as="geometry" />
+        </mxCell>
+        <mxCell id="be_health" parent="zone2" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;" value="/health &amp; Session Exporter" vertex="1">
+          <mxGeometry height="40" width="200" x="30" y="330" as="geometry" />
+        </mxCell>
+        <mxCell id="be_config" parent="zone2" style="text;html=1;strokeColor=none;fillColor=none;align=center;verticalAlign=middle;whiteSpace=wrap;rounded=0;fontSize=11;fontStyle=2" value="Cloud Run Config:&#xa;min-instances=1" vertex="1">
+          <mxGeometry height="30" width="200" x="30" y="520" as="geometry" />
+        </mxCell>
+        <mxCell id="zone3" parent="1" style="swimlane;whiteSpace=wrap;html=1;fillColor=#f5f5f5;fontStyle=1;startSize=30;" value="Google Cloud Services" vertex="1">
+          <mxGeometry height="560" width="260" x="760" y="100" as="geometry" />
+        </mxCell>
+        <mxCell id="gcp_gemini" parent="zone3" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffe6cc;strokeColor=#d79b00;fontStyle=1" value="Gemini Live API&#xa;(gemini-2.0-flash-live-001)" vertex="1">
+          <mxGeometry height="70" width="200" x="30" y="50" as="geometry" />
+        </mxCell>
+        <mxCell id="gcp_firestore" parent="zone3" style="shape=datastore;whiteSpace=wrap;html=1;fillColor=#ffe6cc;strokeColor=#d79b00;" value="Firestore&#xa;(WHO Protocols KB)" vertex="1">
+          <mxGeometry height="70" width="200" x="30" y="150" as="geometry" />
+        </mxCell>
+        <mxCell id="gcp_storage" parent="zone3" style="shape=folder;whiteSpace=wrap;html=1;fillColor=#ffe6cc;strokeColor=#d79b00;" value="Cloud Storage&#xa;(Session Logs JSON)" vertex="1">
+          <mxGeometry height="70" width="200" x="30" y="250" as="geometry" />
+        </mxCell>
+        <mxCell id="gcp_logging" parent="zone3" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffe6cc;strokeColor=#d79b00;" value="Cloud Logging" vertex="1">
+          <mxGeometry height="40" width="200" x="30" y="350" as="geometry" />
+        </mxCell>
+        <mxCell id="gcp_secret" parent="zone3" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffe6cc;strokeColor=#d79b00;" value="Secret Manager&#xa;(GEMINI_API_KEY)" vertex="1">
+          <mxGeometry height="50" width="200" x="30" y="410" as="geometry" />
+        </mxCell>
+        <mxCell id="gcp_iam" parent="zone3" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffe6cc;strokeColor=#d79b00;" value="IAM Service Account" vertex="1">
+          <mxGeometry height="40" width="200" x="30" y="480" as="geometry" />
+        </mxCell>
+        <mxCell id="conn1" edge="1" parent="1" source="fe_ws" style="endArrow=classic;html=1;rounded=0;exitX=1;exitY=0.25;exitDx=0;exitDy=0;entryX=0;entryY=0.25;entryDx=0;entryDy=0;fontSize=10;labelBackgroundColor=#ffffff;" target="be_ws_end" value="WebSocket: audio PCM + video frames + control events">
+          <mxGeometry height="50" relative="1" width="50" as="geometry">
+            <Array as="points">
+              <mxPoint x="320" y="595" />
+              <mxPoint x="320" y="240" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="conn9" edge="1" parent="1" source="be_ws_end" style="endArrow=classic;html=1;rounded=0;exitX=0;exitY=0.75;exitDx=0;exitDy=0;entryX=1;entryY=0.75;entryDx=0;entryDy=0;fontSize=10;labelBackgroundColor=#ffffff;" target="fe_ws" value="Transcript updates + triage cards + agent audio">
+          <mxGeometry height="50" relative="1" width="50" as="geometry">
+            <Array as="points">
+              <mxPoint x="340" y="260" />
+              <mxPoint x="340" y="625" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="conn2" edge="1" parent="1" source="be_fastapi" style="endArrow=classic;startArrow=classic;html=1;rounded=0;exitX=1;exitY=0.5;exitDx=0;exitDy=0;entryX=0;entryY=0.5;entryDx=0;entryDy=0;fontSize=10;labelBackgroundColor=#ffffff;" target="gcp_gemini" value="Bidirectional streaming&#xa;via google-genai SDK">
+          <mxGeometry height="50" relative="1" width="50" as="geometry" />
+        </mxCell>
+        <mxCell id="conn4" edge="1" parent="1" source="be_orch" style="endArrow=classic;html=1;rounded=0;exitX=1;exitY=0.5;exitDx=0;exitDy=0;entryX=0;entryY=0.25;entryDx=0;entryDy=0;fontSize=10;labelBackgroundColor=#ffffff;" target="gcp_firestore" value="get_who_protocol(condition)">
+          <mxGeometry height="50" relative="1" width="50" as="geometry">
+            <Array as="points">
+              <mxPoint x="700" y="315" />
+              <mxPoint x="700" y="268" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="conn5" edge="1" parent="1" source="gcp_firestore" style="endArrow=classic;html=1;rounded=0;exitX=0;exitY=0.75;exitDx=0;exitDy=0;entryX=1;entryY=0.75;entryDx=0;entryDy=0;fontSize=10;labelBackgroundColor=#ffffff;" target="be_orch" value="Grounded protocol steps">
+          <mxGeometry height="50" relative="1" width="50" as="geometry">
+            <Array as="points">
+              <mxPoint x="720" y="303" />
+              <mxPoint x="720" y="328" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="conn6" edge="1" parent="1" source="be_health" style="endArrow=classic;html=1;rounded=0;exitX=1;exitY=0.5;exitDx=0;exitDy=0;entryX=0;entryY=0.5;entryDx=0;entryDy=0;fontSize=10;labelBackgroundColor=#ffffff;" target="gcp_storage" value="Session logs (JSON)">
+          <mxGeometry height="50" relative="1" width="50" as="geometry" />
+        </mxCell>
+        <mxCell id="conn7" edge="1" parent="1" source="be_health" style="endArrow=classic;html=1;rounded=0;exitX=1;exitY=0.75;exitDx=0;exitDy=0;entryX=0;entryY=0.5;entryDx=0;entryDy=0;fontSize=10;labelBackgroundColor=#ffffff;" target="gcp_logging" value="Structured logs">
+          <mxGeometry height="50" relative="1" width="50" as="geometry">
+            <Array as="points">
+              <mxPoint x="680" y="460" />
+              <mxPoint x="680" y="470" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="conn8" edge="1" parent="1" source="be_health" style="endArrow=classic;html=1;rounded=0;exitX=0.5;exitY=1;exitDx=0;exitDy=0;entryX=0;entryY=0.5;entryDx=0;entryDy=0;fontSize=10;labelBackgroundColor=#ffffff;" target="gcp_secret" value="Read API key">
+          <mxGeometry height="50" relative="1" width="50" as="geometry">
+            <Array as="points">
+              <mxPoint x="510" y="535" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="legend" parent="1" style="swimlane;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;fontStyle=1;startSize=25;" value="Key Features &amp; Annotations" vertex="1">
+          <mxGeometry height="80" width="980" x="40" y="680" as="geometry" />
+        </mxCell>
+        <mxCell id="anno1" parent="legend" style="text;html=1;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;whiteSpace=wrap;rounded=0;" value="• Multilingual support (10 languages)" vertex="1">
+          <mxGeometry height="30" width="220" x="20" y="35" as="geometry" />
+        </mxCell>
+        <mxCell id="anno2" parent="legend" style="text;html=1;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;whiteSpace=wrap;rounded=0;" value="• Real-time interrupt handling" vertex="1">
+          <mxGeometry height="30" width="220" x="260" y="35" as="geometry" />
+        </mxCell>
+        <mxCell id="anno3" parent="legend" style="text;html=1;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;whiteSpace=wrap;rounded=0;" value="• Audio gating to reduce echo feedback" vertex="1">
+          <mxGeometry height="30" width="240" x="500" y="35" as="geometry" />
+        </mxCell>
+        <mxCell id="anno4" parent="legend" style="text;html=1;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;whiteSpace=wrap;rounded=0;" value="• Cloud Run min instances = 1 (Low Latency)" vertex="1">
+          <mxGeometry height="30" width="220" x="750" y="35" as="geometry" />
+        </mxCell>
+      </root>
+    </mxGraphModel>
+  </diagram>
+</mxfile>

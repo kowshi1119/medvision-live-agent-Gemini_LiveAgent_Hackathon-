@@ -21,6 +21,7 @@ from __future__ import annotations
 import json
 import logging
 import re
+from datetime import datetime, timezone
 from typing import Any
 
 logger = logging.getLogger("medvision.triage")
@@ -118,18 +119,19 @@ class TriageParser:
 def _validate(raw: dict[str, Any]) -> dict[str, Any]:
     """
     Normalise and validate a raw parsed card dict.
+    Always emits a card — partial cards are better than no card for the demo.
 
-    Required: condition (non-empty string).
-    Required: steps (must be a list type).
-    Optional with defaults:
-      priority  → "urgent"
-      reference → "WHO ETAT 2016"
-
-    Raises ValueError if condition is missing or steps is the wrong type.
+    Defaults:
+      condition  → "unknown_condition"  (never raises on missing)
+      priority   → "urgent"             (safer than delayed)
+      steps      → auto-filled from get_who_protocol when empty
+      reference  → "WHO ETAT 2016"
+      timestamp  → current server time when missing or placeholder
     """
     condition = str(raw.get("condition", "")).strip().lower().replace(" ", "_")
     if not condition:
-        raise ValueError("Triage card missing required field: 'condition'")
+        logger.warning("Triage card missing 'condition' — using 'unknown_condition'")
+        condition = "unknown_condition"
 
     priority = str(raw.get("priority", "urgent")).lower().strip()
     if priority not in VALID_PRIORITIES:
@@ -138,10 +140,19 @@ def _validate(raw: dict[str, Any]) -> dict[str, Any]:
 
     steps_raw = raw.get("steps", [])
     if not isinstance(steps_raw, list):
-        raise ValueError(
-            f"Field 'steps' must be a JSON array, got: {type(steps_raw).__name__}"
-        )
+        logger.warning("Field 'steps' is not a list (%s) — will auto-fill", type(steps_raw).__name__)
+        steps_raw = []
     steps: list[str] = [str(s).strip() for s in steps_raw if str(s).strip()]
+
+    # Auto-fill steps from protocol when the list is empty
+    if not steps and condition != "unknown_condition":
+        try:
+            from agent import get_who_protocol  # delayed import to avoid circular dep
+            protocol = get_who_protocol(condition)
+            steps = [str(s) for s in protocol.get("steps", [])]
+            logger.info("Triage card steps auto-filled from protocol for: %s", condition)
+        except Exception as exc:
+            logger.debug("Could not auto-fill steps from protocol: %s", exc)
 
     # Gemini may use any of these key names for the protocol citation
     reference = str(
@@ -151,9 +162,17 @@ def _validate(raw: dict[str, Any]) -> dict[str, Any]:
         or "WHO ETAT 2016"
     ).strip()
 
+    # Timestamp — use server time when missing or when Gemini emits a placeholder
+    raw_ts = str(raw.get("timestamp") or raw.get("ts") or "")
+    if not raw_ts or raw_ts.upper().startswith("TIMESTAMP") or raw_ts == "2024-01-01T00:00:00Z":
+        timestamp = datetime.now(timezone.utc).isoformat()
+    else:
+        timestamp = raw_ts
+
     return {
         "condition": condition,
         "priority": priority,
         "steps": steps,
         "reference": reference,
+        "timestamp": timestamp,
     }

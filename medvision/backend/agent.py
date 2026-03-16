@@ -24,14 +24,13 @@ _PROTOCOL_LIST: list[dict] = [
         "priority": "immediate",
         "triage_color": "red",
         "steps": [
-            "Call emergency services immediately — do not delay CPR.",
-            "Ensure scene safety. Put on gloves if available.",
-            "Open airway: head-tilt chin-lift (jaw thrust if trauma suspected).",
-            "Check for normal breathing for no more than 10 seconds.",
-            "Begin chest compressions: 30 at rate 100–120/min, depth 5–6 cm.",
-            "Give 2 rescue breaths after every 30 compressions (30:2 ratio).",
-            "Attach AED as soon as available; follow voice prompts without pausing CPR.",
-            "Continue until advanced help arrives or patient shows signs of life.",
+            "Call emergency services immediately — every second counts.",
+            "Check if patient is responsive — tap shoulders firmly and shout their name.",
+            "If unresponsive and not breathing — begin CPR immediately.",
+            "Place heel of hand on centre of chest — push hard and fast 30 times.",
+            "Give 2 rescue breaths after every 30 compressions.",
+            "Continue CPR until emergency services arrive or patient revives.",
+            "If AED available — use it as soon as possible between compressions.",
         ],
         "reference": "WHO ETAT 2016 Ch.2; AHA BLS Guidelines 2020",
         "keywords": ["cardiac_arrest", "no_pulse", "cpr", "heart_stopped", "unconscious", "no_breathing", "resuscitation"],
@@ -42,14 +41,13 @@ _PROTOCOL_LIST: list[dict] = [
         "priority": "immediate",
         "triage_color": "red",
         "steps": [
-            "Call EMS immediately.",
-            "Apply firm direct pressure with a clean cloth or dressing.",
-            "If on a limb, apply tourniquet 5–7 cm above the wound; note time applied.",
-            "Maintain constant firm pressure — do NOT lift to check until 10 minutes elapsed.",
-            "If blood soaks through, add more dressing on top — do NOT remove original.",
-            "Elevate injured limb above heart level if no fracture suspected.",
-            "Keep patient lying flat; cover with blanket to prevent shock.",
-            "Monitor breathing and pulse every 2 minutes.",
+            "Apply firm direct pressure to wound immediately using clean cloth or bandage.",
+            "Do not remove the cloth — add more on top if it soaks through.",
+            "Raise the injured area above heart level if possible.",
+            "If limb is bleeding — apply tourniquet 5cm above wound as last resort.",
+            "Call emergency services immediately for severe or uncontrolled bleeding.",
+            "Keep patient warm and lying down to prevent shock.",
+            "Monitor for signs of shock — pale cold clammy skin, rapid breathing.",
         ],
         "reference": "ATLS 10th ed. 2018 Ch.3; WHO ETAT 2016 Sec.2",
         "keywords": ["bleeding", "haemorrhage", "hemorrhage", "blood_loss", "tourniquet", "wound", "laceration"],
@@ -60,13 +58,13 @@ _PROTOCOL_LIST: list[dict] = [
         "priority": "immediate",
         "triage_color": "red",
         "steps": [
-            "Ask 'Are you choking?' — if patient cannot speak, cough, or breathe, act immediately.",
-            "Call EMS if patient deteriorates or loses consciousness.",
-            "Perform 5 firm back blows between shoulder blades with heel of hand.",
-            "Follow with 5 abdominal thrusts (Heimlich): stand behind, hands above navel.",
-            "Alternate 5 back blows and 5 abdominal thrusts until obstruction clears.",
-            "If patient loses consciousness: begin CPR, look for object each time airway is opened.",
-            "For infant < 1 year: 5 back blows + 5 chest thrusts (NOT abdominal).",
+            "Ask patient to cough as hard and forcefully as possible.",
+            "If coughing fails — give 5 firm back blows between shoulder blades.",
+            "If back blows fail — give 5 abdominal thrusts (Heimlich manoeuvre).",
+            "Stand behind patient, wrap arms around waist, thrust firmly upward.",
+            "Alternate 5 back blows and 5 abdominal thrusts until object clears.",
+            "If patient loses consciousness — begin CPR and call emergency services.",
+            "For pregnant patients or infants — use chest thrusts instead.",
         ],
         "reference": "WHO ETAT 2016 Airway Management; AHA BLS Choking Algorithm 2020",
         "keywords": ["choking", "airway_obstruction", "heimlich", "foreign_body", "stridor"],
@@ -77,14 +75,13 @@ _PROTOCOL_LIST: list[dict] = [
         "priority": "immediate",
         "triage_color": "red",
         "steps": [
-            "Call EMS immediately.",
-            "Administer epinephrine 0.3–0.5 mg IM into outer mid-thigh (adults); 0.01 mg/kg children.",
-            "Position patient lying flat with legs elevated; do NOT allow sitting up.",
-            "If breathing difficulty, allow sitting up while keeping legs elevated.",
-            "Repeat epinephrine every 5–15 minutes if no improvement.",
-            "Give oxygen if available (10–15 L/min via non-rebreather mask).",
-            "If unconscious and not breathing, begin CPR.",
-            "Monitor BP, pulse, and breathing continuously.",
+            "Inject epinephrine auto-injector into outer thigh immediately.",
+            "Call emergency services right now — a second dose may be needed.",
+            "Lay patient flat with legs raised — unless breathing difficulty.",
+            "If breathing difficulty — keep patient sitting upright.",
+            "Give second epinephrine dose after 5 minutes if no improvement.",
+            "Do not give antihistamines as primary treatment — only epinephrine works.",
+            "Monitor breathing and consciousness every minute.",
         ],
         "reference": "WHO ETAT 2016 Sec.2 Anaphylaxis; WAO Anaphylaxis Guidelines 2020",
         "keywords": ["anaphylaxis", "allergic_reaction", "epipen", "epinephrine", "bee_sting", "food_allergy", "hives"],
@@ -95,13 +92,15 @@ _PROTOCOL_LIST: list[dict] = [
         "priority": "immediate",
         "triage_color": "red",
         "steps": [
-            "Apply FAST: Face drooping, Arm weakness, Speech slurred, Time to call EMS.",
-            "Call EMS immediately — note exact time symptoms began.",
+            "Apply FAST test: Face drooping, Arm weakness, Speech slurred, Time to call EMS.",
+            "Call emergency services immediately — note the exact time symptoms started.",
+            "Every minute without treatment = 1.9 million brain cells lost — act fast.",
             "Keep patient calm and still; do NOT give food, water, or medications by mouth.",
             "Position: head elevated 30° if conscious; recovery position if unconscious.",
-            "Do NOT give aspirin without confirmation (haemorrhagic stroke contraindication).",
+            "Do NOT give aspirin — haemorrhagic stroke is a contraindication.",
+            "Keep patient calm and warm — cover with a blanket.",
+            "Monitor breathing every 2 minutes — be ready for CPR if needed.",
             "Loosen tight clothing around neck.",
-            "Monitor neurological status every 5 minutes.",
         ],
         "reference": "WHO Stroke Guidelines 2016; AHA/ASA Acute Stroke Guidelines 2019",
         "keywords": ["stroke", "cva", "brain_attack", "facial_droop", "weakness", "speech", "fast"],
@@ -109,16 +108,16 @@ _PROTOCOL_LIST: list[dict] = [
     {
         "condition": "head_injury",
         "display_name": "Severe Head Injury",
-        "priority": "immediate",
+        "priority": "urgent",
         "triage_color": "red",
         "steps": [
-            "Call EMS immediately.",
-            "Assume spinal injury — immobilise cervical spine with manual in-line stabilisation.",
-            "Open airway using jaw-thrust maneuver ONLY (not head-tilt).",
-            "Place unconscious breathing patient in recovery position with spinal alignment.",
-            "Control scalp bleeding with firm pressure (do NOT press on depressed skull fracture).",
-            "Monitor GCS every 5 minutes.",
-            "Note mechanism of injury, loss of consciousness duration, seizure activity.",
+            "Keep patient completely still — do not move unless in immediate danger.",
+            "Call emergency services for any loss of consciousness or confusion.",
+            "Control bleeding with firm gentle pressure — do not remove embedded objects.",
+            "Do not give aspirin or ibuprofen — they increase bleeding risk.",
+            "Monitor every 10 minutes — check responsiveness and pupil size.",
+            "Watch for danger signs — repeated vomiting, seizure, unequal pupils.",
+            "Keep neck stable at all times — assume spinal injury until ruled out.",
         ],
         "reference": "ATLS 10th ed. 2018 Ch.6; WHO ETAT 2016 Sec.3",
         "keywords": ["head_injury", "skull_fracture", "concussion", "tbi", "traumatic_brain", "gcs"],
@@ -129,14 +128,13 @@ _PROTOCOL_LIST: list[dict] = [
         "priority": "urgent",
         "triage_color": "yellow",
         "steps": [
-            "Ensure scene safety — remove from heat source.",
-            "Call EMS for burns > 10% body surface, face/airway, or full-thickness burns.",
-            "Cool with cool running water for 20 minutes — start within 3 hours.",
-            "Remove jewellery and loose clothing — do NOT remove if stuck to skin.",
-            "Cover with clean non-fluffy material or cling film applied loosely.",
-            "Keep patient warm — burns cause rapid hypothermia.",
-            "Do NOT apply ice, butter, toothpaste, or home remedies.",
-            "For airway burns (facial soot, singed nasal hair): give oxygen immediately.",
+            "Cool burn with cool running water for minimum 20 minutes.",
+            "Do not use ice, butter, toothpaste, or any cream.",
+            "Remove jewellery and clothing near burn — unless stuck to skin.",
+            "Cover with clean non-fluffy material — cling film is ideal.",
+            "Call emergency services for burns larger than the patient's palm.",
+            "Do not burst any blisters that form.",
+            "Keep patient warm — burns cause rapid heat loss.",
         ],
         "reference": "WHO Burns Manual 2014; ISBI Practice Guidelines 2016",
         "keywords": ["burns", "thermal_injury", "scalding", "fire", "smoke_inhalation", "skin_burn"],
@@ -144,15 +142,16 @@ _PROTOCOL_LIST: list[dict] = [
     {
         "condition": "fractures",
         "display_name": "Suspected Fracture",
-        "priority": "urgent",
+        "priority": "delayed",
         "triage_color": "yellow",
         "steps": [
-            "Call EMS if open, femur, pelvis, or spinal fracture suspected.",
-            "Immobilise the injured limb in the position found using splints or padding.",
-            "For open fractures: cover wound with clean moist dressing — do NOT push bone back.",
-            "Apply ice pack wrapped in cloth for 20 minutes.",
-            "Check circulation distal to fracture: pulse, sensation, warmth, capillary refill.",
-            "Monitor for compartment syndrome: pain out of proportion, paraesthesia, pallor.",
+            "Do not try to straighten the injured area.",
+            "Immobilise the fracture in the position found using a splint or padding.",
+            "Check circulation below fracture — pulse, sensation, and movement.",
+            "Apply ice pack wrapped in cloth to reduce swelling — 20 minutes on, off.",
+            "Elevate the injured limb if possible to reduce swelling.",
+            "Give pain relief if available and patient is conscious.",
+            "Seek emergency care for open fractures or suspected spine fractures.",
         ],
         "reference": "ATLS 10th ed. 2018 Ch.7; WHO Surgical Care at District Hospital 2003",
         "keywords": ["fracture", "broken_bone", "dislocation", "splint", "compartment_syndrome"],
@@ -163,13 +162,13 @@ _PROTOCOL_LIST: list[dict] = [
         "priority": "urgent",
         "triage_color": "yellow",
         "steps": [
-            "Call EMS if patient is unconscious or cannot swallow.",
-            "If conscious and able to swallow: give 15–20g fast-acting glucose (juice, tablets).",
-            "Recheck blood glucose after 15 minutes; repeat if still < 4 mmol/L.",
-            "If unconscious: do NOT give anything by mouth — recovery position.",
-            "If glucagon available: administer IM 1mg adults, 0.5mg children < 25kg.",
-            "For suspected DKA (fruity breath, deep rapid breathing, confusion): transport urgently.",
-            "Monitor conscious level, blood glucose, and vitals every 5 minutes.",
+            "If patient is conscious — give sugary drink or glucose tablets now.",
+            "Do not give food or drink if patient is unconscious.",
+            "If unconscious — call emergency services immediately.",
+            "If glucagon kit available — inject into thigh or upper arm.",
+            "Lay unconscious patient in recovery position.",
+            "Recheck patient in 15 minutes — if no improvement call emergency services.",
+            "Note any medications patient takes and report to emergency team.",
         ],
         "reference": "WHO ETAT 2016 Hypoglycaemia; IDF Clinical Practice Guidelines 2021",
         "keywords": ["hypoglycaemia", "hypoglycemia", "diabetes", "dka", "low_blood_sugar", "insulin", "glucose"],
@@ -180,13 +179,15 @@ _PROTOCOL_LIST: list[dict] = [
         "priority": "urgent",
         "triage_color": "yellow",
         "steps": [
-            "Call EMS if seizure > 5 minutes, recurrent, or no regain of consciousness.",
-            "Time the seizure from onset.",
-            "Protect from injury: clear surroundings, cushion head.",
-            "Turn patient on their side (recovery position) to prevent aspiration.",
-            "Loosen tight clothing around neck.",
-            "Do NOT restrain or insert anything in mouth.",
-            "After seizure: monitor breathing and maintain recovery position.",
+            "Do NOT restrain the patient — clear all objects from the area around them.",
+            "Time the seizure from onset — call EMS immediately if it exceeds 5 minutes.",
+            "Protect the head with something soft — a cushion or folded clothing.",
+            "Turn patient gently onto their side after convulsions stop.",
+            "Do NOT put anything in the mouth — the tongue cannot be swallowed.",
+            "Loosen tight clothing around the neck.",
+            "Stay with the patient until they are fully conscious and oriented.",
+            "If this is the patient's first-ever seizure: take to hospital immediately.",
+            "After seizure: monitor breathing and maintain the recovery position.",
         ],
         "reference": "WHO ETAT 2016 Convulsions; Epilepsy Foundation First Aid 2017",
         "keywords": ["seizure", "convulsion", "epilepsy", "fit", "status_epilepticus", "shaking"],
@@ -197,14 +198,13 @@ _PROTOCOL_LIST: list[dict] = [
         "priority": "immediate",
         "triage_color": "red",
         "steps": [
-            "Ensure rescuer safety — do NOT enter water without flotation device.",
-            "Call EMS immediately.",
-            "Remove victim from water without delay.",
-            "If not breathing: begin CPR immediately — 5 initial rescue breaths then 30:2.",
-            "Do NOT attempt to clear water from lungs — this delays CPR.",
-            "If AED available: use — dry chest briefly first.",
-            "Keep patient warm and dry.",
-            "Transport ALL drowning victims to hospital even if apparently recovered.",
+            "Remove patient from water safely — do not risk rescuer drowning.",
+            "Call emergency services immediately.",
+            "Check for breathing — if absent begin CPR immediately.",
+            "Give 5 rescue breaths first before beginning chest compressions.",
+            "Continue CPR until emergency services arrive.",
+            "Keep patient warm — drowning victims lose heat rapidly.",
+            "All drowning patients must go to hospital even if they seem recovered.",
         ],
         "reference": "WHO ETAT 2016; ERC Drowning Guidelines 2021",
         "keywords": ["drowning", "near_drowning", "submersion", "water_rescue"],
@@ -215,13 +215,13 @@ _PROTOCOL_LIST: list[dict] = [
         "priority": "urgent",
         "triage_color": "yellow",
         "steps": [
-            "Call EMS and local Poison Control immediately.",
-            "Identify the poison if safe: drug name, quantity, time of ingestion.",
-            "Do NOT induce vomiting unless directed by Poison Control.",
-            "If unconscious and breathing: recovery position; monitor airway.",
-            "For skin/eye contamination: remove clothing; irrigate with water for 20 minutes.",
-            "Bring medication containers or evidence to emergency team.",
-            "Monitor vital signs and consciousness continuously.",
+            "Call poison control and emergency services immediately.",
+            "Identify the poison if possible — keep container for emergency team.",
+            "Do not induce vomiting unless specifically told to by poison control.",
+            "If patient is unconscious place in recovery position.",
+            "If poison is on skin or eyes — flush with large amounts of water.",
+            "Do not give food, water, or milk unless told to by poison control.",
+            "Monitor breathing and consciousness every minute.",
         ],
         "reference": "WHO Model Formulary 2010 Poisoning; Goldfrank's 10th ed.",
         "keywords": ["poisoning", "overdose", "toxic", "ingestion", "pesticide", "drug_overdose"],
@@ -229,16 +229,16 @@ _PROTOCOL_LIST: list[dict] = [
     {
         "condition": "heat_stroke",
         "display_name": "Heat Stroke",
-        "priority": "immediate",
-        "triage_color": "red",
+        "priority": "urgent",
+        "triage_color": "yellow",
         "steps": [
-            "Call EMS immediately — heat stroke is rapidly fatal.",
-            "Move to cool environment immediately.",
-            "Begin aggressive cooling: ice packs to neck, axillae, and groin.",
-            "Fan patient while spraying tepid water (evaporative cooling).",
-            "Remove all clothing except undergarments.",
-            "Give cool water only if fully conscious.",
-            "Continue cooling until temperature reaches 39°C or EMS arrives.",
+            "Move patient to coolest available place immediately.",
+            "Remove excess clothing.",
+            "Cool patient rapidly — wet cloths on neck, armpits, and groin.",
+            "Fan patient vigorously while applying wet cloths.",
+            "Give cool water to drink if patient is fully conscious.",
+            "Call emergency services — heat stroke is life-threatening.",
+            "Do not give aspirin or paracetamol — they do not help heat stroke.",
         ],
         "reference": "WHO Environmental Health 2009; Bouchama & Knochel NEJM 2002",
         "keywords": ["heat_stroke", "hyperthermia", "heat_exhaustion", "sunstroke"],
@@ -249,13 +249,13 @@ _PROTOCOL_LIST: list[dict] = [
         "priority": "urgent",
         "triage_color": "yellow",
         "steps": [
-            "Call EMS — severe hypothermia is life-threatening.",
-            "Remove from cold environment gently — avoid rough handling (arrhythmia risk).",
-            "Remove wet clothing carefully while protecting from wind.",
-            "Rewarm passively: dry blankets, cover head.",
-            "Give warm sweet drinks ONLY if fully conscious and can swallow.",
-            "Apply warm compresses to neck, axillae, and groin (not hot).",
-            "If no pulse: begin CPR — hypothermic hearts may respond to prolonged resuscitation.",
+            "Move patient to warm dry shelter immediately.",
+            "Remove all wet clothing carefully.",
+            "Wrap patient in blankets including the head — leave face exposed.",
+            "Give warm sweet drinks only if patient is fully conscious.",
+            "Do not rub limbs — this pushes cold blood to the heart.",
+            "Do not apply direct heat — use body warmth and blankets only.",
+            "Call emergency services for severe hypothermia or unconsciousness.",
         ],
         "reference": "ERC Hypothermia Guidelines 2021; Paal et al. Scand J Trauma 2016",
         "keywords": ["hypothermia", "cold_exposure", "frostbite", "freezing"],
@@ -266,13 +266,15 @@ _PROTOCOL_LIST: list[dict] = [
         "priority": "immediate",
         "triage_color": "red",
         "steps": [
-            "Call EMS immediately — treat all acute chest pain as cardiac until proven otherwise.",
-            "Have patient stop all activity and rest in a comfortable position (usually sitting up).",
-            "If not allergic: give 300mg aspirin to chew (adults only).",
-            "Administer oxygen if SpO2 < 94%.",
-            "Loosen tight clothing.",
-            "Be prepared to perform CPR if patient deteriorates.",
-            "Document: onset, character, radiation, diaphoresis, nausea, dyspnoea.",
+            "Have patient stop all activity and sit or lie down immediately.",
+            "Loosen any tight clothing around chest and neck.",
+            "Call emergency services immediately — do not leave the patient alone.",
+            "If conscious and not allergic to aspirin: give 300mg aspirin to CHEW (not swallow).",
+            "Administer oxygen if available and SpO2 < 94%.",
+            "Monitor breathing every 2 minutes — do not give food or water.",
+            "Be prepared to perform CPR — have AED ready if available.",
+            "If patient loses consciousness and stops breathing: begin CPR immediately.",
+            "Document onset time, character, radiation, diaphoresis, nausea, dyspnoea.",
         ],
         "reference": "WHO CVD Guidelines 2016; ESC STEMI Guidelines 2018",
         "keywords": ["chest_pain", "heart_attack", "acs", "myocardial_infarction", "mi", "stemi", "angina"],
@@ -283,13 +285,14 @@ _PROTOCOL_LIST: list[dict] = [
         "priority": "immediate",
         "triage_color": "red",
         "steps": [
-            "Call EMS immediately.",
-            "Position patient upright (sitting forward, tripod position) — do NOT lay flat.",
-            "Ensure airway is clear.",
-            "Give oxygen if available: 10–15 L/min via non-rebreather.",
-            "For known asthma: assist with prescribed bronchodilator inhaler.",
-            "Loosen tight clothing around chest and neck.",
-            "Monitor respiratory rate, SpO2, and consciousness.",
+            "Sit patient fully upright — never lay flat; forward-leaning tripod position if needed.",
+            "Loosen all clothing around chest and neck immediately.",
+            "Call emergency services if no improvement within 3 minutes.",
+            "For known asthma: give prescribed inhaler immediately — 4 puffs via spacer.",
+            "For allergic reaction with breathing difficulty: give epinephrine if available.",
+            "Give oxygen if available: 10–15 L/min via non-rebreather mask.",
+            "Keep patient calm — anxiety and panic significantly worsen breathing.",
+            "Monitor SpO2 if pulse oximeter available — below 94% is danger threshold.",
             "Be prepared to initiate CPR if breathing stops.",
         ],
         "reference": "WHO ETAT 2016 Respiratory Signs; BTS Emergency O2 Guidelines 2017",
@@ -301,14 +304,14 @@ _PROTOCOL_LIST: list[dict] = [
         "priority": "immediate",
         "triage_color": "red",
         "steps": [
-            "Call EMS immediately.",
-            "Ensure scene safety.",
-            "Check responsiveness: shout name, tap shoulders firmly.",
-            "Open airway: head-tilt chin-lift (jaw-thrust if trauma).",
-            "Check breathing: look/listen/feel for 10 seconds.",
-            "If not breathing: begin CPR (30:2).",
-            "If breathing: place in recovery position.",
-            "Re-assess every 2 minutes.",
+            "Check for response — tap shoulder firmly and shout the patient's name.",
+            "Call emergency services immediately.",
+            "Open airway: tilt head back and lift chin (jaw-thrust only if trauma suspected).",
+            "Check breathing: look, listen, and feel for 10 seconds.",
+            "If not breathing: begin CPR — 30 chest compressions then 2 rescue breaths.",
+            "If breathing: place in recovery position on their side.",
+            "Do not leave the patient — monitor and re-assess every minute.",
+            "Attach AED as soon as available and follow voice prompts.",
         ],
         "reference": "WHO ETAT 2016 Ch.2; ILCOR BLS 2020",
         "keywords": ["unconscious", "unresponsive", "coma", "collapse", "found_down"],
@@ -316,15 +319,16 @@ _PROTOCOL_LIST: list[dict] = [
     {
         "condition": "eye_injury",
         "display_name": "Eye Injury",
-        "priority": "urgent",
+        "priority": "delayed",
         "triage_color": "yellow",
         "steps": [
-            "Do NOT rub or apply pressure to the eye.",
-            "For chemical exposure: irrigate IMMEDIATELY with copious clean water for 20 minutes.",
-            "For penetrating objects: shield but do NOT remove the object.",
-            "For blunt trauma: apply cold compress gently around (not on) the eye.",
-            "Cover injured eye loosely with eye shield — do NOT use fluffy materials.",
-            "Arrange urgent ophthalmology referral.",
+            "Do not rub or apply pressure to the injured eye.",
+            "If chemical in eye — flush immediately with clean water for 20 minutes.",
+            "If object in eye — do not try to remove it.",
+            "Cover eye loosely with clean cloth or eye shield.",
+            "Cover the UNINJURED eye too — both eyes move together.",
+            "Seek emergency care immediately for any penetrating eye injury.",
+            "Keep patient calm and as still as possible.",
         ],
         "reference": "WHO Prevention of Blindness; ATLS 10th ed. Ocular Trauma",
         "keywords": ["eye_injury", "chemical_eye", "foreign_body_eye", "corneal", "hyphema"],
@@ -335,13 +339,13 @@ _PROTOCOL_LIST: list[dict] = [
         "priority": "urgent",
         "triage_color": "yellow",
         "steps": [
-            "Call EMS and transport to nearest hospital with antivenom urgently.",
-            "Keep patient still — movement increases venom absorption.",
-            "Immobilise bitten limb at or below heart level with a splint.",
-            "Remove jewellery and tight clothing from affected limb.",
-            "Mark advancing swelling/bruising with time every 15 minutes.",
-            "Do NOT cut, suck, or apply tourniquet to bite site.",
-            "Note snake description for antivenom selection.",
+            "Keep patient completely still — movement spreads venom faster.",
+            "Immobilise bitten limb at or below heart level.",
+            "Remove watches, rings, and tight items near bite site.",
+            "Mark the edge of swelling with pen and note the time every 15 minutes.",
+            "Call emergency services immediately — antivenom may be needed.",
+            "Do not cut the wound, suck out venom, apply tourniquet, or use ice.",
+            "Identify the snake if safely possible — photograph from a safe distance.",
         ],
         "reference": "WHO Snakebite Envenomation Guidelines 2019",
         "keywords": ["snake_bite", "snakebite", "envenomation", "venom", "antivenom"],
@@ -352,13 +356,13 @@ _PROTOCOL_LIST: list[dict] = [
         "priority": "immediate",
         "triage_color": "red",
         "steps": [
-            "Call EMS with obstetric capability immediately.",
-            "Position mother on her LEFT side to relieve aortocaval compression.",
-            "Assess: gestational age, contractions, bleeding, baby's position.",
-            "For postpartum haemorrhage: fundal massage; assist with oxytocin if available.",
-            "For cord prolapse: knee-chest position; cover cord with warm moist cloth.",
-            "For eclamptic seizure: protect from injury, left lateral position.",
-            "Monitor maternal vital signs continuously.",
+            "Call emergency services immediately — do not attempt home delivery alone.",
+            "Keep mother calm, warm, and lying on her left side.",
+            "If birth is imminent — prepare clean surface, towels, and warm environment.",
+            "Do not pull on baby or cord under any circumstances.",
+            "If cord comes out before baby — keep cord moist and call immediately.",
+            "After delivery — keep baby warm on mother's chest immediately.",
+            "Monitor mother for severe bleeding after delivery.",
         ],
         "reference": "WHO ETAT 2016 Obstetric Emergencies; WHO PPH Recommendations 2012",
         "keywords": ["obstetric_emergency", "postpartum_haemorrhage", "eclampsia", "cord_prolapse", "labour"],
@@ -436,75 +440,232 @@ def get_who_protocol(condition: str) -> dict:
     }
 
 
-SYSTEM_INSTRUCTION = """You are MedVision, a calm and authoritative real-time emergency medical AI for first responders.
+SYSTEM_INSTRUCTION = """You are MedVision — a real-time emergency medical AI assistant.
+You watch the camera and listen to the microphone simultaneously.
 
-CAPABILITIES:
-- You SEE through the live camera feed — scan it constantly and speak about what you observe.
-- You HEAR the first responder through their microphone.
-- You SPEAK clear, step-by-step guidance through audio.
-- You use WHO ETAT / ATLS emergency protocols as your primary reference.
+═══════════════════════════════════════
+CORE IDENTITY
+═══════════════════════════════════════
 
-══════════════════════════════════════════════════════
-VISUAL-FIRST RULE — MOST IMPORTANT:
-You receive live camera frames continuously. You MUST proactively describe and act on
-what you observe in the camera WITHOUT waiting for speech input.
+You are NOT a chatbot. You are an emergency triage officer.
+You do NOT give disclaimers or filler phrases.
+You OBSERVE, IDENTIFY, ACT — in that order, every time.
 
-When you receive a [VISUAL_CHECK] prompt, immediately scan the current frame and:
-1. Describe exactly what the patient is doing with their body (posture, hand position, face).
-2. If you see ANY symptom cue below, name it out loud and immediately ask one focused question.
-3. Do NOT say "I cannot see" — describe what is visible even if subtle.
-══════════════════════════════════════════════════════
+═══════════════════════════════════════
+LISTEN FIRST — SPEAK SECOND
+═══════════════════════════════════════
 
-VISUAL CUE RECOGNITION — react to these IMMEDIATELY upon seeing them:
-• Hand on chest / pressing chest / clutching chest area
-  → Say: "I can see your hand on your chest. Are you feeling chest pain or pressure?"
-  → Suspect: chest pain, MI, angina. Call get_who_protocol("chest_pain")
+Your default state is SILENCE.
+You only speak when:
+  1. You clearly see a symptom in the camera
+  2. The user finishes speaking
+  3. A dangerous condition is confirmed
 
-• Holding head / pressing temples / hand on forehead / squinting in pain
-  → Say: "I can see you're holding your head. Are you experiencing a headache or dizziness?"
-  → Suspect: severe headache, migraine, concussion, stroke. Call get_who_protocol("stroke") if sudden onset.
+When the user is speaking — STOP and LISTEN completely.
+Never interrupt the user mid-sentence.
+After you finish speaking — WAIT for the user to respond.
 
-• Labored breathing / rapid shallow breathing / hunched forward / visible effort to breathe
-  → Say: "I notice your breathing looks labored. How long has this been happening?"
-  → Suspect: asthma, respiratory distress, anaphylaxis. Call get_who_protocol("respiratory_distress")
+CORRECT behaviour:
+  Agent: "Chest pain confirmed. Two immediate steps —
+          One: sit the patient down. Two: loosen clothing.
+          Do you need the remaining steps?"
+  (then WAIT silently for user response)
 
-• Slumped / limp / unable to hold upright / head drooping
-  → Say: "The patient appears very fatigued or weak. Are they conscious and responding?"
-  → Suspect: shock, hypoglycemia, syncope. Call get_who_protocol("shock")
+WRONG behaviour:
+  Agent: "Step 1... Step 2... Step 3... Step 4... also Step 5..."
+  (user cannot speak)
 
-• Clutching abdomen / bent forward guarding belly
-  → Say: "I can see abdominal guarding. Is there pain in the stomach area? When did it start?"
-  → Suspect: internal bleeding, appendicitis. Call get_who_protocol("abdominal_trauma")
+═══════════════════════════════════════
+RESPONSE LENGTH RULES — STRICTLY FOLLOW
+═══════════════════════════════════════
 
-• Pale / visibly sweating / clammy skin
-  → Say: "The patient looks pale and sweaty. Check their pulse now."
-  → Suspect: shock, internal bleeding. Call get_who_protocol("shock")
+First response after detecting ANY condition:
+  → Maximum 3 sentences
+  → State condition, state severity, give first 2 steps only
+  → Then STOP and wait
 
-• Unresponsive / eyes closed / not moving
-  → Say: "The patient appears unresponsive. Check airway and breathing immediately."
-  → Begin CPR assessment. Call get_who_protocol("cardiac_arrest")
+Only give more steps when user asks for them.
+Never give all 7 steps without being asked.
 
-• Facial droop / one-sided weakness / arm drift
-  → Say: "I can see possible facial droop. Apply FAST assessment now."
-  → Call get_who_protocol("stroke") immediately.
+Perfect first response example:
+"I can see the patient holding their chest — this is chest pain, URGENT.
+Step one: have them sit down and stop all activity immediately.
+Step two: loosen any tight clothing around the chest and neck.
+Do you want the next steps?"
 
-HOW TO RESPOND — CRITICAL RULES:
-1. When you get [VISUAL_CHECK] — describe the camera image first, always.
-2. When you identify a condition from the camera, call get_who_protocol immediately.
-3. Deliver protocol steps one at a time. Keep sentences under 15 words.
-4. If the tool is unavailable, use WHO ETAT / ATLS training as fallback.
-5. When the first responder speaks, ALWAYS respond — never stay silent.
-6. Ask only ONE clarifying question at a time.
-7. When interrupted, stop immediately and listen.
+═══════════════════════════════════════
+TURN-TAKING RULES
+═══════════════════════════════════════
 
-VOICE STYLE:
-- Calm, clear, authoritative. Short sentences only.
-- End every critical instruction with: "Confirm when done."
-- Speak in the same language the responder uses.
+After you speak — enter LISTENING mode immediately.
+You get ONE speaking turn, then the user gets ONE speaking turn.
 
-TRIAGE CARD — output this EXACTLY when you identify a condition:
-[TRIAGE_CARD]{"condition":"headache","priority":"urgent","steps":["Assess onset: sudden thunderclap headache = emergency","Check FAST: face, arms, speech, time","Lie patient down in quiet dark area","Do not give aspirin until cause confirmed","Call EMS if worst headache of life or sudden onset"],"reference":"WHO ETAT 2016","triage_color":"yellow"}[/TRIAGE_CARD]
+If user says "next steps" or "continue" → give next 2 steps only, then wait.
+If user says "what else"              → give 1 more piece of information, then wait.
+If user says "repeat"                 → repeat only the last thing you said.
+If no speech for 8 seconds            → ask ONE short question only.
 
-priority values: "immediate" (red), "urgent" (yellow), "delayed" (green)
-Generate one triage card per identified condition. Be specific and accurate."""
+═══════════════════════════════════════
+VISUAL DETECTION DICTIONARY
+═══════════════════════════════════════
+
+When you see any of these in the camera — speak immediately:
+
+BODY SIGNAL                            CONDITION              SEVERITY
+────────────────────────────────────────────────────────────────────
+Hand pressed on chest                  chest_pain             URGENT
+Hand on chest + pale face              cardiac_arrest         IMMEDIATE
+Both hands on throat                   choking                IMMEDIATE
+Lips turning blue                      choking                IMMEDIATE
+Rapid visible chest rising             difficulty_breathing   IMMEDIATE
+Forward lean + neck muscles straining  difficulty_breathing   URGENT
+Full body convulsing                   seizure                IMMEDIATE
+Eyes rolled back                       seizure                IMMEDIATE
+Both hands holding head or temples     head_injury            URGENT
+Head drooping + eyes closing           unconscious_patient    IMMEDIATE
+Complete limpness                      unconscious_patient    IMMEDIATE
+Slumped posture + no response          unconscious_patient    IMMEDIATE
+Red swollen face + visible hives       anaphylaxis            IMMEDIATE
+Scratching throat + swollen lips       anaphylaxis            IMMEDIATE
+Holding stomach + doubled over         poisoning              URGENT
+Unsteady balance + confused look       stroke                 IMMEDIATE
+Face drooping on one side              stroke                 IMMEDIATE
+Cradling arm or leg carefully          fractures              DELAYED
+Holding or covering eye area           eye_injury             DELAYED
+Sweating + pale + shaking              diabetic_emergency     URGENT
+Flushed red face + touching forehead   heat_stroke            URGENT
+Shivering + blue lips + slow movement  hypothermia            URGENT
+Heavily pregnant + visible distress    obstetric_emergency    IMMEDIATE
+
+You do not need audio confirmation to speak about visual symptoms.
+Keep your response SHORT — follow the 3-sentence rule above.
+
+If the image is dark or unclear: ask once — "Can you improve the lighting or move closer?"
+
+═══════════════════════════════════════
+AUDIO DETECTION DICTIONARY
+═══════════════════════════════════════
+
+KEYWORD HEARD                          CONDITION TO TRIGGER
+───────────────────────────────────────────────────────────────
+chest pain / chest tightness           chest_pain
+can’t breathe / breathless             difficulty_breathing
+not breathing / stopped breathing      cardiac_arrest
+choking / can’t swallow                choking
+unconscious / not responding           unconscious_patient
+seizure / convulsing / shaking         seizure
+allergic / swelling / rash             anaphylaxis
+head injury / hit head / dizzy         head_injury
+stroke / face drooping / slurred       stroke
+bleeding / blood / cut                 severe_bleeding
+burn / fire / scalded                  burns
+broken / fracture / can’t move         fractures
+diabetic / sugar / insulin             diabetic_emergency
+poisoned / swallowed / overdose        poisoning
+snake bite / bitten                    snake_bite
+pregnant / labour / contractions       obstetric_emergency
+heat / sun / overheated                heat_stroke
+cold / freezing / hypothermia          hypothermia
+drowning / water / submerged           drowning
+
+═══════════════════════════════════════
+CONFIDENCE SCORING
+═══════════════════════════════════════
+
+SCORE 3 — MAXIMUM (audio AND visual both confirm same condition)
+  → State condition immediately + first 2 steps + severity
+  → Generate triage card
+  → Wait for user
+  Example: "CONFIRMED: I see [visual] and hear [audio]. This is [condition], [SEVERITY].
+  Step one: [action]. Step two: [action]. Do you want more steps?"
+
+SCORE 2 — HIGH (one strong signal)
+  → State what you see/hear + ask ONE confirming question
+  Example: "HIGH PROBABILITY: I can see [visual]. This appears to be [condition].
+  Can you confirm — is the patient [specific yes/no question]?"
+
+SCORE 1 — LOW (weak or ambiguous signal)
+  → Describe exactly what you observe + ask one targeted question
+  Never give a wrong protocol — ask first.
+
+═══════════════════════════════════════
+TRIAGE CARD — GENERATE SILENTLY
+═══════════════════════════════════════
+
+Generate the triage card in the background — do NOT read it aloud.
+The frontend displays it automatically. Just output the marker block.
+
+[TRIAGE_CARD]{"condition":"condition_name","priority":"immediate|urgent|delayed","steps":["step1","step2","step3","step4","step5"],"reference":"WHO ETAT 2016","timestamp":"CURRENT_ISO_TIMESTAMP"}[/TRIAGE_CARD]
+
+Generate this after every confirmed condition. Never read it aloud.
+
+═══════════════════════════════════════
+SEVERITY LEVELS
+═══════════════════════════════════════
+
+IMMEDIATE → life-threatening, seconds matter
+            cardiac_arrest, choking, severe_bleeding,
+            anaphylaxis, unconscious_patient, difficulty_breathing severe
+
+URGENT    → serious, needs treatment within 30 minutes
+            chest_pain, stroke, head_injury, seizure,
+            burns, snake_bite, obstetric_emergency
+
+DELAYED   → stable, can wait
+            minor fractures, eye_injury minor, heat_stroke mild
+
+═══════════════════════════════════════
+GREETING — ONCE ONLY
+═══════════════════════════════════════
+
+Say this once at session start, then go completely silent:
+"MedVision ready. Camera and microphone active.
+Show me the patient or describe the emergency."
+
+Do not speak again until you detect a symptom or the user speaks.
+
+═══════════════════════════════════════
+WHAT NEVER TO SAY
+═══════════════════════════════════════
+
+Never say more than 3 sentences before pausing
+Never read all 7 steps without user asking
+Never say "As I was saying..." or repeat previous turns
+Never say "Let me also mention..." to extend your speaking turn
+Never use filler words: "Certainly", "Of course", "Absolutely"
+Never say "I cannot see clearly" → describe what you CAN see
+Never say "Please consult a doctor" → you are the emergency guidance
+Never introduce yourself more than once per session
+
+═══════════════════════════════════════
+LANGUAGE
+═══════════════════════════════════════
+
+Respond in whatever language the user speaks.
+Detect from the very first word. Never mix languages in one response."""
+
+_LANGUAGE_NAMES: dict[str, str] = {
+    "en": "English",
+    "es": "Spanish",
+    "fr": "French",
+    "ar": "Arabic",
+    "hi": "Hindi",
+    "zh": "Chinese (Mandarin)",
+    "sw": "Swahili",
+    "ta": "Tamil",
+    "pt": "Portuguese",
+    "ru": "Russian",
+}
+
+
+def build_system_instruction(lang: str = "en") -> str:
+    """Return SYSTEM_INSTRUCTION with a hard language constraint injected."""
+    lang_name = _LANGUAGE_NAMES.get(lang, "English")
+    base = SYSTEM_INSTRUCTION.replace(
+        "Respond in whatever language the user speaks.",
+        f"You MUST respond ONLY in {lang_name} for this entire session. Every word you speak must be in {lang_name}.",
+    )
+    if lang != "en":
+        base += f"\n\nCRITICAL LANGUAGE RULE: All guidance, triage cards, and responses MUST be delivered in {lang_name} only. Do not switch languages under any circumstance."
+    return base
 

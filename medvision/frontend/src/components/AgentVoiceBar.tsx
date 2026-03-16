@@ -1,29 +1,36 @@
 import React from 'react';
+import { AgentMode } from '../types';
 
 interface AgentVoiceBarProps {
-  isSpeaking: boolean;
   audioLevel: number;
-  transcript: string;
+  agentMode: AgentMode;
   partialTranscript: string;
-  showInterrupt: boolean;
-  onInterrupt: () => void;
 }
 
-export function AgentVoiceBar({ isSpeaking }: { isSpeaking: boolean }) {
+const scaleFactors = [0.3, 0.6, 0.85, 1.0, 0.85, 0.6, 0.3];
+
+export const AgentVoiceBar: React.FC<AgentVoiceBarProps> = ({ audioLevel, agentMode, partialTranscript }) => {
+  const color = agentMode === 'SPEAKING' ? 'var(--green)' : agentMode === 'LISTENING' ? 'var(--blue)' : 'var(--border)';
+
   return (
-    <div className={`flex items-center justify-center h-8 transition-opacity duration-300 ${isSpeaking ? 'opacity-100' : 'opacity-20'}`}>
-      {Array.from({ length: 5 }).map((_, i) => (
-        <div
-          key={i}
-          className="w-1 h-4 mx-0.5 bg-red-500 rounded-full wave-bar"
-          style={{
-            animationPlayState: isSpeaking ? 'running' : 'paused',
-            animationDelay: `${i * 0.1}s`,
-            height: isSpeaking ? `${Math.random() * 12 + 4}px` : '4px',
-            transition: 'height 0.2s ease-in-out'
-          }}
-        />
-      ))}
+    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', height: 80 }}>
+      <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'flex-end', height: 60, gap: 5 }}>
+        {scaleFactors.map((scale, i) => (
+          <div
+            key={i}
+            style={{
+              width: 5,
+              borderRadius: 3,
+              backgroundColor: color,
+              height: `${6 + (audioLevel * 52 * scale)}px`,
+              transition: 'height 80ms ease-out',
+            }}
+          />
+        ))}
+      </div>
+      <div style={{ fontFamily: "'Space Mono', monospace", fontSize: 10, color: 'var(--mid)', height: 20, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: 300 }}>
+        {partialTranscript}
+      </div>
     </div>
   );
-}
+};

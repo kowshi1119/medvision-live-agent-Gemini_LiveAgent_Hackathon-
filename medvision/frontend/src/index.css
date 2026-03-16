@@ -2,99 +2,55 @@
 @tailwind components;
 @tailwind utilities;
 
-@layer base {
-  html, body, #root {
-    height: 100%;
-    margin: 0;
-    padding: 0;
-    background-color: #0A0A0F;
-    color: #F1F5F9;
-    font-family: 'Inter', sans-serif;
-    overflow: hidden;
-  }
-  ::-webkit-scrollbar {
-    width: 6px;
-    height: 6px;
-  }
-  ::-webkit-scrollbar-track {
-    background: transparent;
-  }
-  ::-webkit-scrollbar-thumb {
-    background: #27272a;
-    border-radius: 3px;
-  }
-  ::-webkit-scrollbar-thumb:hover {
-    background: #3f3f46;
-  }
+:root {
+  --bg:      #080B14;
+  --panel:   #0D1220;
+  --surface: #121929;
+  --border:  #1E2D45;
+  --blue:    #1A6BFF;
+  --red:     #FF2D55;
+  --yellow:  #FF9500;
+  --green:   #30D158;
+  --bright:  #F0F4FF;
+  --mid:     #6B7FA3;
+  --dim:     #3A5070;
 }
 
-@layer components {
-  .card {
-    @apply bg-[#12121A]/80 backdrop-blur-sm border border-white/10 rounded-lg;
-  }
-  .btn {
-    @apply px-4 py-2 rounded-md text-sm font-semibold transition-colors duration-150 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-offset-[#0A0A0F];
-  }
-  .btn-primary {
-    @apply bg-red-600 text-white hover:bg-red-700 focus:ring-red-500 shadow-[0_0_15px_rgba(239,68,68,0.3)];
-  }
-  .btn-secondary {
-    @apply bg-gray-800 text-gray-300 border border-gray-600 hover:bg-gray-700 hover:border-gray-500 focus:ring-gray-500;
-  }
-  .btn-danger {
-    @apply bg-red-900 text-red-200 border border-red-700 hover:bg-red-800 focus:ring-red-600;
-  }
-  .input-dark {
-    @apply w-full bg-gray-900 border border-gray-700 rounded-md px-3 py-1.5 text-sm text-gray-300 placeholder-gray-500 focus:outline-none focus:ring-1 focus:ring-red-500 focus:border-red-500;
-  }
-  .status-pill {
-    @apply flex items-center gap-2 rounded-full bg-black/40 px-3 py-1 text-xs font-semibold;
-  }
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+html, body, #root {
+  width: 100vw; height: 100vh;
+  overflow: hidden;
+  background: var(--bg);
+  font-family: 'Space Mono', monospace;
 }
 
-@layer utilities {
-  .pulse-ring {
-    animation: pulse-ring-anim 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
-  }
-  .slide-up {
-    animation: slide-up-anim 0.5s cubic-bezier(0.25, 0.46, 0.45, 0.94) both;
-  }
-  .wave-bar {
-    animation: wave-anim 1.2s ease-in-out infinite;
-  }
-  .blink {
-    animation: blink-anim 1s step-end infinite;
-  }
+body::before {
+  content: '';
+  position: fixed; inset: 0; z-index: 0;
+  pointer-events: none;
+  background-image: radial-gradient(var(--border) 1px, transparent 1px);
+  background-size: 24px 24px;
+  opacity: 0.3;
 }
 
-@keyframes pulse-ring-anim {
-  0%, 100% {
-    transform: scale(1);
-    opacity: 0.5;
-  }
-  50% {
-    transform: scale(1.5);
-    opacity: 0;
-  }
-}
+::-webkit-scrollbar { width: 3px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
 
-@keyframes slide-up-anim {
-  0% {
-    transform: translateY(20px);
-    opacity: 0;
-  }
-  100% {
-    transform: translateY(0);
-    opacity: 1;
-  }
-}
+@keyframes blink   { 0%,100%{opacity:1} 50%{opacity:0.15} }
+@keyframes glowB   { 0%,100%{box-shadow:0 0 6px rgba(26,107,255,.3)} 50%{box-shadow:0 0 24px rgba(26,107,255,.9)} }
+@keyframes glowR   { 0%,100%{box-shadow:0 0 6px rgba(255,45,85,.3)}  50%{box-shadow:0 0 24px rgba(255,45,85,.9)} }
+@keyframes slideIn { from{transform:translateX(40px);opacity:0} to{transform:translateX(0);opacity:1} }
+@keyframes fadeIn  { from{opacity:0;transform:translateY(6px)} to{opacity:1;transform:translateY(0)} }
+@keyframes scan    { 0%{background-position:0 0} 100%{background-position:0 100%} }
+@keyframes spin    { to{transform:rotate(360deg)} }
+@keyframes sevFlash{ 0%{opacity:1;transform:scale(1)} 50%{opacity:.6;transform:scale(1.1)} 100%{opacity:1;transform:scale(1)} }
 
-@keyframes wave-anim {
-  0%, 40%, 100% { transform: scaleY(0.4); }
-  20% { transform: scaleY(1.0); }
-}
-
-@keyframes blink-anim {
-  50% { opacity: 0; }
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 1ms !important;
+    transition-duration: 1ms !important;
+  }
 }
 

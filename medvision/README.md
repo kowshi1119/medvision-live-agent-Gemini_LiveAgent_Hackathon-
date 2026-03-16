@@ -14,10 +14,11 @@ Rural first responders and community health workers operate without expert consu
 
 MedVision is a real-time multimodal emergency medical agent that:
 
-- **SEES** the patient through the camera (WebRTC video frames → Gemini Live)
-- **HEARS** the first responder via bidirectional voice (Web Audio API → Gemini Live)
+- **SEES** the patient through the camera (WebRTC video frames → Gemini Live) with live AI visual-cue callouts
+- **HEARS** the first responder via bidirectional voice (Web Audio API → Gemini Live) with echo-gated mic
 - **SPEAKS** back WHO-grounded guidance in any of 10 languages
 - **GENERATES** structured triage cards with zero hallucinations (grounded in Firestore)
+- **ESCALATES** severity in real-time — colour-coded badge tracks the highest severity seen in the session
 - **INTERRUPTS** on demand — critical for fast-moving emergencies
 
 ---
@@ -27,7 +28,7 @@ MedVision is a real-time multimodal emergency medical agent that:
 ```mermaid
 flowchart TD
     A([User Browser\nReact + WebRTC]) -->|WebSocket\nvideo frames + audio PCM| B([Cloud Run\nFastAPI + uvicorn])
-    B -->|google-genai SDK\nbidirectional stream| C([Gemini Live API\ngemini-2.0-flash-live-001])
+    B -->|google-genai SDK\nbidirectional stream| C([Gemini Live API\ngemini-2.5-flash-native-audio-latest])
     C -->|Tool call:\nget_who_protocol| D([Firestore\nwho_protocols collection\n20 WHO ETAT protocols])
     D -->|Protocol steps + citation| C
     B -->|Session JSON logs| E([Cloud Storage\nmedvision-session-logs-*])
@@ -61,14 +62,14 @@ flowchart TD
 
 | Layer | Technology |
 |-------|-----------|
-| AI Model | `gemini-2.0-flash-live-001` via Gemini Live API |
-| SDK | `google-genai >= 1.0.0` |
+| AI Model | `gemini-2.5-flash-native-audio-latest` via Gemini Live API |
+| SDK | `google-genai >= 1.5.0` |
 | Backend | Python 3.11, FastAPI, uvicorn, WebSockets |
 | Knowledge base | Firestore (20 WHO ETAT/ATLS protocols) |
 | Session storage | Cloud Storage (JSON logs) |
 | Observability | Google Cloud Logging |
 | Frontend | React 18, TypeScript, Tailwind CSS 3, Vite |
-| Audio | Web Audio API (PCM capture, waveform visualizer) |
+| Audio | Web Audio API (PCM 16kHz capture, RMS analyser, 24kHz playback) |
 | Video | WebRTC (`getUserMedia`) |
 | Deployment | Cloud Run (min-instances=1, 2GB RAM, 2 CPU) |
 | IaC | Terraform (Cloud Run, Firestore, GCS, IAM) |
@@ -83,23 +84,42 @@ flowchart TD
 - `gcloud` CLI authenticated: `gcloud auth application-default login`
 - Node.js 20+, Python 3.11+
 
-### Deploy backend (< 10 commands)
+### Option A — Local development (no cloud required)
+
+```bash
+# 1. Copy and configure backend environment
+cd medvision/backend
+copy .env.example .env
+# Set GEMINI_API_KEY in .env (get it from https://aistudio.google.com/apikey)
+
+# 2. Install dependencies and start backend
+pip install -r requirements.txt
+uvicorn main:app --host 0.0.0.0 --port 8082
+
+# 3. In a second terminal, start frontend
+cd ../frontend
+npm install
+# Set VITE_CLOUD_RUN_URL=http://localhost:8082 in frontend/.env
+npm run dev
+# → Open http://localhost:3000
+```
+
+> See [RunGuide.md](RunGuide.md) for detailed local-dev instructions.
+
+### Option B — Deploy to Cloud Run (production)
 
 ```bash
 # 1. Set your project
 gcloud config set project YOUR_PROJECT_ID
 
-# 2. Clone or enter the repo
+# 2. Enter backend directory
 cd medvision/backend
 
 # 3. Deploy everything (enables APIs, builds image, deploys Cloud Run, seeds Firestore)
 chmod +x deploy.sh && ./deploy.sh
-
 # The script prints the Cloud Run URL at the end.
 # Example: https://medvision-abc123-uc.a.run.app
 ```
-
-### Run frontend locally
 
 ```bash
 # 4. Enter frontend directory
@@ -145,22 +165,28 @@ curl https://medvision-abc123-uc.a.run.app/health
 
 | Feature | Implementation |
 |---------|---------------|
-| Live camera vision | WebRTC → JPEG frames → Gemini multimodal input |
-| Bidirectional voice | Web Audio PCM 16kHz → Gemini Live audio → PCM playback |
-| Interrupt handling | `/interrupt` button + WebSocket `interrupt` message → instant cancellation |
+| Live camera vision | WebRTC → JPEG frames (2 fps) → Gemini multimodal input |
+| Bidirectional voice | Web Audio API PCM 16kHz → Gemini Live audio → PCM 24kHz playback |
+| Agent mode indicator | Real-time LISTENING / SPEAKING / STANDBY badge in header |
+| Visual cue detection | "AI SEES: …" banner overlaid on camera feed when Gemini detects objects |
+| Severity escalation | Max-severity tracker — RED / YELLOW / GREEN badge persists across session |
+| Interrupt handling | Always-visible INTERRUPT button → instant agent cancellation via WebSocket |
 | Inline triage cards | `[TRIAGE_CARD]{json}[/TRIAGE_CARD]` markers parsed in real-time |
+| Live transcripts | Partial (streaming) + final user transcript shown in real-time |
 | Multilingual | 10 languages; Gemini responds in the user's language |
-| Live Latency | Real-time connection latency displayed in header |
+| Echo gate | Mic blocked 800 ms after agent speech ends — no feedback loop |
 
 ### Technical Implementation (30%)
 
 | Feature | Implementation |
 |---------|---------------|
-| `google-genai` SDK | `genai.Client().aio.live.connect()` |
-| Firestore grounding | `get_who_protocol()` Gemini tool → zero hallucinations |
+| `google-genai` SDK | `genai.Client().aio.live.connect()` with `gemini-2.5-flash-native-audio-latest` |
+| Firestore grounding | `get_who_protocol()` Gemini tool → 20 WHO/ATLS protocols, zero hallucinations |
+| RMS audio analysis | AudioWorklet PCM → AnalyserNode → RMS `audioLevel` drives waveform bars |
 | Cloud Run min-instances=1 | `--min-instances 1` in deploy.sh + Terraform |
+| Cloud Storage logging | Full session event JSON saved to GCS on disconnect |
 | Cloud Logging | `google.cloud.logging` + `CloudLoggingHandler` |
-| Graceful degradation | Camera/mic errors are surfaced in UI; session continues on audio/vision only |
+| Graceful degradation | Camera/mic errors surfaced in UI; session continues on audio/vision only |
 
 ### Demo & Presentation (30%)
 
@@ -170,7 +196,9 @@ curl https://medvision-abc123-uc.a.run.app/health
 | `deploy.sh` | `backend/deploy.sh` |
 | Terraform | `backend/terraform/main.tf` |
 | Health endpoint | `GET /health` → `{"status":"ok","version":"1.0.0"}` |
-| Reproducible setup | This Quick Start section |
+| User guide | [UserGuide.md](UserGuide.md) |
+| Run guide | [RunGuide.md](RunGuide.md) |
+| Reproducible setup | Quick Start section above |
 
 ---
 
@@ -188,11 +216,11 @@ curl https://medvision-abc123-uc.a.run.app/health
 medvision/
 ├── backend/
 │   ├── main.py              FastAPI app + WebSocket /live endpoint
-│   ├── agent.py             Gemini Live session manager
-│   ├── knowledge.py         Firestore WHO protocol queries
+│   ├── agent.py             Gemini Live session manager + system instruction
+│   ├── knowledge.py         Firestore WHO protocol queries (20 conditions)
 │   ├── triage.py            [TRIAGE_CARD] parser + validator
 │   ├── cloud_storage.py     Session log persistence to GCS
-│   ├── seed_firestore.py    Seeds 20 WHO protocols
+│   ├── seed_firestore.py    Seeds 20 WHO/ATLS protocols into Firestore
 │   ├── Dockerfile
 │   ├── requirements.txt
 │   ├── deploy.sh
@@ -201,19 +229,21 @@ medvision/
 │       └── main.tf          Cloud Run + Firestore + GCS + IAM
 └── frontend/
     ├── src/
-    │   ├── App.tsx           3-column layout
+    │   ├── App.tsx           3-column layout, session state, severity tracker
     │   ├── main.tsx
     │   ├── index.css
     │   ├── hooks/
-    │   │   ├── useGeminiLive.ts   WebSocket lifecycle + state
-    │   │   ├── useCamera.ts       WebRTC camera capture
-    │   │   └── useAudio.ts        PCM audio recording
+    │   │   ├── useGeminiLive.ts   WebSocket lifecycle + audio/video streaming
+    │   │   ├── useCamera.ts       WebRTC camera capture (JPEG 2fps)
+    │   │   └── useAudio.ts        PCM 16kHz capture + RMS audioLevel analyser
     │   └── components/
-    │       ├── CameraFeed.tsx     Live video with LIVE badge
-    │       ├── AgentVoiceBar.tsx  Animated waveform + transcript
-    │       ├── TriageCard.tsx     Animated priority card
+    │       ├── CameraFeed.tsx     Live video with AI Sees overlay
+    │       ├── AgentVoiceBar.tsx  RMS-driven waveform bars + partial transcript
+    │       ├── TriageCard.tsx     Colour-coded priority card
     │       ├── SessionLog.tsx     Real-time event log
-    │       └── StatusBar.tsx      Connection status header
+    │       └── StatusBar.tsx      Connection status footer
+    ├── public/
+    │   └── pcm-capture-processor.js  AudioWorklet PCM processor
     ├── index.html
     ├── package.json
     ├── tailwind.config.ts

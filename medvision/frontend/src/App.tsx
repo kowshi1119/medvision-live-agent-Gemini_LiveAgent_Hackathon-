@@ -1,369 +1,223 @@
-import React, { useState, useMemo, useCallback, useRef, useEffect } from 'react';
-import {
-  AlertTriangle,
-  Mic,
-  MicOff,
-  PhoneOff,
-  Video,
-  VideoOff,
-  Volume2,
-  Zap,
-  Download,
-  Trash2,
-  Languages,
-  Settings,
-  HeartPulse,
-  BrainCircuit,
-  Eye,
-  CircleDotDashed,
-} from 'lucide-react';
-
-import { useGeminiLive, SessionLogEntry } from './hooks/useGeminiLive';
-import { useCamera } from './hooks/useCamera';
+import React, { useState, useEffect, useCallback } from 'react';
+import { AgentMode, Severity, ConnState, TriageCard, LogEntry } from './types';
 import { useAudio } from './hooks/useAudio';
-
+import { useCamera } from './hooks/useCamera';
+import { useGeminiLive } from './hooks/useGeminiLive';
 import { CameraFeed } from './components/CameraFeed';
+import { MicControl } from './components/MicControl';
 import { AgentVoiceBar } from './components/AgentVoiceBar';
-import { TriageCard, TriageData } from './components/TriageCard';
-import { SessionLog, LogEntry } from './components/SessionLog';
+import { TriageCard as TriageCardComponent } from './components/TriageCard';
+import { SessionLog } from './components/SessionLog';
 import { StatusBar } from './components/StatusBar';
 
-// --- Main App Component ---
-export default function App() {
+const LANGUAGES = [
+  {code:'en',label:'English'}, {code:'es',label:'Español'},
+  {code:'fr',label:'Français'}, {code:'ar',label:'العربية'},
+  {code:'hi',label:'हिन्दी'}, {code:'zh',label:'中文'},
+  {code:'sw',label:'Kiswahili'}, {code:'ta',label:'தமிழ்'},
+  {code:'pt',label:'Português'}, {code:'ru',label:'Русский'},
+];
+
+const App: React.FC = () => {
+  const [sessionActive, setSessionActive] = useState(false);
+  const [agentMode, setAgentMode] = useState<AgentMode>('STANDBY');
+  const [maxSeverity, setMaxSeverity] = useState<Severity>('GREEN');
+  const [sevFlash, setSevFlash] = useState(false);
   const [language, setLanguage] = useState('en');
-  const [cloudRunUrl, setCloudRunUrl] = useState(import.meta.env.VITE_CLOUD_RUN_URL || 'http://localhost:8082');
+  const [backendUrl, setBackendUrl] = useState('http://localhost:8081');
+  const [seconds, setSeconds] = useState(0);
 
-  const {
-    connectionState,
-    isSpeaking,
-    transcript,
-    triageCards,
-    sessionLog,
-    lastAgentChunkTs,
-    connect,
-    disconnect,
-    interrupt,
-    sendAudio,
-    sendVideoFrame,
-    sendText,
-  } = useGeminiLive();
+  const { isMuted, audioLevel, toggleMute, startAudio, stopAudio } = useAudio();
+  const { isCameraOn, videoRef, toggleCamera, startCamera, stopCamera, captureFrame } = useCamera();
 
-  const [micMuted, setMicMuted] = useState(false);
-  const micMutedRef = useRef(false);
-  useEffect(() => { micMutedRef.current = micMuted; }, [micMuted]);
-
-  // Track isSpeaking in a ref so sendAudioGated can read it synchronously
-  const isSpeakingRef = useRef(false);
-  useEffect(() => { isSpeakingRef.current = isSpeaking; }, [isSpeaking]);
-
-  // Diagnostic counter — logs every 20th chunk so we know audio is flowing
-  const audioSentRef = useRef(0);
-
-  const GATE_MS = 800;
-  const sendAudioGated = useCallback((base64: string) => {
-    if (micMutedRef.current) return;
-    // Hard block while agent is actively speaking (prevents echo feedback)
-    if (isSpeakingRef.current) return;
-    // Post-speech cooldown: block for GATE_MS after the last agent audio chunk
-    if (Date.now() - lastAgentChunkTs.current < GATE_MS) return;
-    audioSentRef.current += 1;
-    if (audioSentRef.current === 1 || audioSentRef.current % 20 === 0) {
-      console.log(`[MedVision Gate] ✅ Sending user audio chunk #${audioSentRef.current}`);
-    }
-    sendAudio(base64);
-  }, [sendAudio, lastAgentChunkTs]);
-
-  const { videoRef, isActive: isCameraOn, startCamera, stopCamera, captureFrame } = useCamera();
-  const { isRecording: isMicOn, error: audioError, startRecording: startMic, stopRecording: stopMic } = useAudio();
-
-  // Flashes true for 150 ms every time a video frame is transmitted to Gemini
-  const [isCapturing, setIsCapturing] = useState(false);
-  const captureFlashRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-
-  const handleSessionToggle = () => {
-    if (connectionState === 'connected') {
-      disconnect();
-      stopCamera();
-      stopMic();
-    } else {
-      connect(cloudRunUrl, language);
+  const onTriageCard = (card: TriageCard) => {
+    const newSeverity = card.priority === 'immediate' ? 'RED' : card.priority === 'urgent' ? 'YELLOW' : 'GREEN';
+    if (newSeverity === 'RED' || (newSeverity === 'YELLOW' && maxSeverity !== 'RED')) {
+      setMaxSeverity(newSeverity);
+      setSevFlash(true);
+      setTimeout(() => setSevFlash(false), 700);
     }
   };
 
-  useEffect(() => {
-    if (connectionState === 'connected' && !isMicOn) {
-      startCamera();
-      startMic(sendAudioGated);
+  const onVisualDetection = useCallback((detection: { condition: string; confidence: string; severity: string; observation: string }) => {
+    const sev = detection.severity;
+    if (sev === 'immediate') {
+      setMaxSeverity('RED');
+      setSevFlash(true);
+      setTimeout(() => setSevFlash(false), 700);
+    } else if (sev === 'urgent') {
+      setMaxSeverity(prev => prev !== 'RED' ? 'YELLOW' : prev);
+      setSevFlash(true);
+      setTimeout(() => setSevFlash(false), 700);
     }
-  }, [connectionState, isMicOn, startCamera, startMic, sendAudioGated]);
+  }, []);
 
-  // Send video frames at 2 fps when connected; flash the capture indicator each time
-  useEffect(() => {
-    if (connectionState !== 'connected') return;
-    const interval = setInterval(() => {
-      const frame = captureFrame();
-      if (frame) {
-        sendVideoFrame(frame);
-        setIsCapturing(true);
-        if (captureFlashRef.current) clearTimeout(captureFlashRef.current);
-        captureFlashRef.current = setTimeout(() => setIsCapturing(false), 150);
+  const { connState, triageCards, sessionLog, partialTranscript, agentTranscript, connect, disconnect, interrupt, sendAudio, sendSpeechEvent } = useGeminiLive({
+    backendUrl,
+    language,
+    captureFrame,
+    onAgentModeChange: setAgentMode,
+    onTriageCard,
+    onVisualDetection,
+  });
+
+const handleStart = useCallback(async () => {
+      try {
+        await connect();
+        await startCamera();
+        await startAudio(
+          (b64: string) => { sendAudio(b64); },
+          (evtType) => { sendSpeechEvent(evtType); },
+        );
+        setSessionActive(true);
+        setMaxSeverity('GREEN');
+      } catch (err) {
+        console.error('[App] Session start failed:', err);
+        alert('Failed to start: ' + (err as Error).message);
       }
-    }, 500);
-    return () => {
-      clearInterval(interval);
-      if (captureFlashRef.current) clearTimeout(captureFlashRef.current);
-    };
-  }, [connectionState, captureFrame, sendVideoFrame]);
+    }, [connect, startCamera, startAudio, sendAudio, sendSpeechEvent]);
 
-  // Visual probe: every 8 s nudge Gemini to describe what it sees in the camera.
-  // This makes the agent proactively react to visual cues even without speech.
-  const visualProbeRef = useRef<ReturnType<typeof setInterval> | null>(null);
-  useEffect(() => {
-    if (connectionState !== 'connected') {
-      if (visualProbeRef.current) { clearInterval(visualProbeRef.current); visualProbeRef.current = null; }
+  const handleEnd = () => {
+    disconnect();
+    stopAudio();
+    stopCamera();
+    setSessionActive(false);
+    setSeconds(0);
+  };
+
+  const handleKeyDown = useCallback((e: KeyboardEvent) => {
+    if (e.target instanceof HTMLInputElement || e.target instanceof HTMLSelectElement || e.target instanceof HTMLTextAreaElement) {
       return;
     }
-    // First probe fires 4 s after connect so greeting finishes first
-    const t = setTimeout(() => {
-      sendText('[VISUAL_CHECK] Describe briefly what you observe in the camera right now. If you see a symptom cue (hand on chest, holding head, labored breathing, slumped posture), name it and ask one focused question.');
-      visualProbeRef.current = setInterval(() => {
-        if (!isSpeakingRef.current) {
-          sendText('[VISUAL_CHECK] Look at the camera. Describe any visible symptom cue you observe right now in one sentence.');
-        }
-      }, 8000);
-    }, 4000);
-    return () => {
-      clearTimeout(t);
-      if (visualProbeRef.current) { clearInterval(visualProbeRef.current); visualProbeRef.current = null; }
-    };
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [connectionState, sendText]);
+    if (e.code === 'Space') {
+      e.preventDefault();
+      toggleMute();
+    } else if (e.code === 'Escape') {
+      interrupt();
+    } else if (e.key.toLowerCase() === 'm') {
+      toggleMute();
+    }
+  }, [toggleMute, interrupt]);
 
-  const mappedSessionLog = useMemo((): LogEntry[] =>
-    sessionLog.map((entry: SessionLogEntry) => ({
-      type: entry.type === 'system' ? 'info' : entry.type === 'transcript' ? 'user' : entry.type,
-      message: entry.content,
-      timestamp: new Date(entry.ts).toISOString(),
-    })), [sessionLog]);
+  useEffect(() => {
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [handleKeyDown]);
 
-  const handleDownloadReport = () => {
-    const report = {
-      session_start: mappedSessionLog.find(e => e.type === 'info')?.timestamp,
-      session_end: new Date().toISOString(),
-      language,
-      triage_cards: triageCards,
-      full_log: mappedSessionLog,
-    };
-    const blob = new Blob([JSON.stringify(report, null, 2)], { type: 'application/json' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `medvision_report_${new Date().toISOString()}.json`;
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    URL.revokeObjectURL(url);
+  useEffect(() => {
+    let timer: NodeJS.Timeout;
+    if (sessionActive) {
+      timer = setInterval(() => setSeconds(s => s + 1), 1000);
+    }
+    return () => clearInterval(timer);
+  }, [sessionActive]);
+
+  const formatTime = (totalSeconds: number) => {
+    const mins = Math.floor(totalSeconds / 60).toString().padStart(2, '0');
+    const secs = (totalSeconds % 60).toString().padStart(2, '0');
+    return `${mins}:${secs}`;
   };
 
-  const AppHeader = ({ connectionState, onSessionToggle }: { connectionState: string; onSessionToggle: () => void }) => (
-    <header className="flex items-center justify-between h-14 px-4 border-b border-white/10 shrink-0">
-      <div className="flex items-center gap-3">
-        <div className="w-8 h-8 flex items-center justify-center bg-red-600/20 rounded-full border border-red-600">
-          <HeartPulse className="w-5 h-5 text-red-500" />
-        </div>
-        <h1 className="text-xl font-bold text-white tracking-tighter">MedVision</h1>
-      </div>
-      <div className="hidden md:block">
-        <p className="text-sm tracking-wider text-gray-400">MEDICAL COMMAND CENTER</p>
-      </div>
-      <div className="flex items-center gap-3">
-        {/* Always-visible session toggle — works at any screen size / zoom */}
-        <button
-          onClick={onSessionToggle}
-          disabled={connectionState === 'connecting'}
-          className={`relative flex items-center gap-2 px-4 py-1.5 rounded-md text-sm font-semibold transition-colors focus:outline-none disabled:opacity-50 ${
-            connectionState === 'connected'
-              ? 'bg-red-900 text-red-200 border border-red-700 hover:bg-red-800'
-              : 'bg-red-600 text-white hover:bg-red-700 shadow-[0_0_12px_rgba(239,68,68,0.4)]'
-          }`}
-        >
-          {connectionState === 'connecting' && <Spinner />}
-          {connectionState === 'connected'
-            ? <><PhoneOff size={14} className="mr-1" />END SESSION</>
-            : connectionState === 'connecting' ? 'CONNECTING…'
-            : 'START SESSION'}
-        </button>
-        <StatusBar connectionState={connectionState} />
-        <div className="w-px h-6 bg-white/10"></div>
-        <span className="text-sm font-mono text-gray-400">UTC {new Date().toISOString().substring(11, 19)}</span>
-      </div>
-    </header>
-  );
+  const severityConfig = {
+    RED: { color: 'var(--red)', label: '🔴 CRITICAL', animation: 'glowR 2s infinite' },
+    YELLOW: { color: 'var(--yellow)', label: '⚠ URGENT', animation: '' },
+    GREEN: { color: 'var(--green)', label: '● STABLE', animation: '' },
+  };
+
+  const agentModeConfig = {
+    STANDBY: { text: '◌ STANDBY', color: 'var(--dim)' },
+    LISTENING: { text: '● LISTENING', color: 'var(--blue)' },
+    SPEAKING: { text: '◎ SPEAKING', color: 'var(--green)' },
+  };
 
   return (
-    <div className="flex flex-col h-screen bg-[#0A0A0F] text-slate-100 font-sans overflow-hidden">
-      <AppHeader connectionState={connectionState} onSessionToggle={handleSessionToggle} />
-      <main className="grid flex-1 gap-4 p-4 grid-cols-[240px_1fr_240px] lg:grid-cols-[340px_1fr_320px] overflow-hidden">
-        <LeftPanel isCameraOn={isCameraOn} isMicOn={isMicOn} micMuted={micMuted} onToggleMic={() => setMicMuted(m => !m)} connectionState={connectionState} videoRef={videoRef} audioError={audioError} isCapturing={isCapturing} />
-        <CenterPanel isSpeaking={isSpeaking} transcript={transcript} triageCards={triageCards} isConnected={connectionState === 'connected'} onInterrupt={interrupt} />
-        <RightPanel
-          connectionState={connectionState}
-          onSessionToggle={handleSessionToggle}
-          language={language}
-          onLanguageChange={setLanguage}
-          cloudRunUrl={cloudRunUrl}
-          onCloudRunUrlChange={setCloudRunUrl}
-          sessionLog={mappedSessionLog}
-          onDownloadReport={handleDownloadReport}
-        />
+    <div style={{position:'fixed',inset:0,display:'flex',
+                 flexDirection:'column',background:'var(--bg)',
+                 overflow:'hidden',zIndex:1}}>
+
+      <header style={{flexShrink:0,height:56,display:'flex',
+                      alignItems:'center',gap:12,padding:'0 20px',
+                      borderBottom:'1px solid var(--border)',
+                      background:'rgba(13,18,32,0.97)',
+                      backdropFilter:'blur(10px)',zIndex:10}}>
+        <h1 style={{fontFamily:"'Chakra Petch',sans-serif", fontWeight:700, fontSize:18}}>🩺 MEDVISION</h1>
+        <div style={{fontFamily:"'Space Mono',monospace", color: sessionActive ? 'var(--blue)' : 'var(--dim)'}}>
+          {formatTime(seconds)}
+        </div>
+        <div style={{
+            border: `1px solid ${severityConfig[maxSeverity].color}`,
+            color: severityConfig[maxSeverity].color,
+            padding: '2px 8px',
+            borderRadius: 4,
+            fontSize: 10,
+            fontWeight: 'bold',
+            animation: sevFlash ? 'sevFlash 0.7s ease-in-out' : severityConfig[maxSeverity].animation,
+        }}>
+          {severityConfig[maxSeverity].label}
+        </div>
+        <div style={{flex:1}}></div>
+        <select value={language} onChange={e => setLanguage(e.target.value)} style={{background:'var(--surface)', border:'1px solid var(--border)', color:'var(--bright)', padding:'4px 8px', borderRadius:4}}>
+          {LANGUAGES.map(lang => <option key={lang.code} value={lang.code}>{lang.label}</option>)}
+        </select>
+        {sessionActive && <button onClick={interrupt} style={{background:'var(--yellow)', color:'black', padding:'4px 12px', borderRadius:4, fontWeight:'bold'}}>INTERRUPT</button>}
+        <button onClick={sessionActive ? handleEnd : handleStart} style={{background: sessionActive ? 'var(--red)' : 'var(--green)', color:'black', padding:'4px 12px', borderRadius:4, fontWeight:'bold'}}>
+          {sessionActive ? 'END SESSION' : '▶ START SESSION'}
+        </button>
+      </header>
+
+      <main style={{flex:1,minHeight:0,display:'flex',
+                    flexDirection:'row',overflow:'hidden',zIndex:1}}>
+
+        <aside style={{width:300,flexShrink:0,display:'flex',
+                       flexDirection:'column',overflow:'hidden',
+                       borderRight:'1px solid var(--border)'}}>
+          <div style={{padding:12, flexShrink:0}}>
+            <CameraFeed videoRef={videoRef} isCameraOn={isCameraOn} toggleCamera={toggleCamera} isSpeaking={agentMode === 'SPEAKING'} />
+          </div>
+          <div style={{flex:1, minHeight:0, overflowY:'auto', padding: '0 12px'}}>
+            {triageCards.map((card, i) => <TriageCardComponent key={i} card={card} />)}
+          </div>
+          <div style={{flexShrink:0, borderTop:'1px solid var(--border)', display:'flex', justifyContent:'center', padding:'12px 0'}}>
+            <MicControl isActive={sessionActive} isMuted={isMuted} audioLevel={audioLevel} onToggleMute={toggleMute} />
+          </div>
+        </aside>
+
+        <section style={{flex:1,minWidth:0,display:'flex',
+                         flexDirection:'column',overflow:'hidden'}}>
+          <div style={{flexShrink:0, textAlign:'center', fontFamily:"'Chakra Petch',sans-serif", fontSize:36, color:agentModeConfig[agentMode].color, padding:'16px 0'}}>
+            {agentModeConfig[agentMode].text}
+          </div>
+          <div style={{flexShrink:0}}>
+            <AgentVoiceBar audioLevel={agentMode === 'SPEAKING' ? 0.5 : audioLevel} agentMode={agentMode} partialTranscript={partialTranscript} />
+          </div>
+          <div style={{flex:1, minHeight:0, overflowY:'auto', padding: '0 24px', fontFamily:"'JetBrains Mono',monospace", fontSize:14, color:'var(--bright)', whiteSpace:'pre-wrap'}}>
+            {agentTranscript}
+          </div>
+        </section>
+
+        <aside style={{width:280,flexShrink:0,display:'flex',
+                       flexDirection:'column',overflow:'hidden',
+                       borderLeft:'1px solid var(--border)'}}>
+            <div style={{flexShrink:0, padding:12, borderBottom:'1px solid var(--border)'}}>
+                <label style={{fontSize:10, color:'var(--dim)', display:'block', marginBottom:4}}>Backend URL</label>
+                <input type="text" value={backendUrl} onChange={e => setBackendUrl(e.target.value)} style={{width:'100%', background:'var(--surface)', border:'1px solid var(--border)', color:'var(--bright)', padding:'4px 8px', borderRadius:4}}/>
+            </div>
+          <div style={{flex:1, minHeight:0, overflow:'hidden'}}>
+            <SessionLog entries={sessionLog} />
+          </div>
+        </aside>
+
       </main>
-    </div>
-  );
-}
 
-// --- Layout Components ---
+      <footer style={{flexShrink:0,height:32,display:'flex',
+                      alignItems:'center',justifyContent:'space-between',
+                      padding:'0 16px',borderTop:'1px solid var(--border)',
+                      background:'var(--panel)'}}>
+        <StatusBar connState={connState} />
+      </footer>
 
-const LeftPanel = ({ isCameraOn, isMicOn, micMuted, onToggleMic, connectionState, videoRef, audioError, isCapturing }: { isCameraOn: boolean; isMicOn: boolean; micMuted: boolean; onToggleMic: () => void; connectionState: string; videoRef: React.RefObject<HTMLVideoElement>; audioError: string | null; isCapturing: boolean }) => (
-  <div className="flex flex-col gap-3 h-full overflow-y-auto">
-    {/* Fixed-height camera box so the rest of the panel is always reachable */}
-    <div className="shrink-0 h-48 card overflow-hidden">
-      <CameraFeed videoRef={videoRef} isCapturing={isCapturing} isConnected={connectionState === 'connected'} />
-    </div>
-    <div className="grid grid-cols-3 gap-2">
-      <StatusPill icon={<Eye size={14} />} label="VISION" active={isCameraOn} />
-      <StatusPill icon={<Volume2 size={14} />} label="AUDIO" active={isMicOn && !micMuted} />
-      <StatusPill icon={<BrainCircuit size={14} />} label="AGENT" active={connectionState === 'connected'} />
-    </div>
-    {audioError && (
-      <div className="flex items-start gap-2 p-2 rounded bg-red-900/40 border border-red-700">
-        <AlertTriangle size={14} className="text-red-400 mt-0.5 shrink-0" />
-        <p className="text-xs text-red-300">{audioError}</p>
-      </div>
-    )}
-    {connectionState === 'connected' && (
-      <button onClick={onToggleMic} className={`w-full btn flex items-center justify-center gap-2 ${micMuted ? 'btn-danger' : 'btn-secondary'}`}>
-        {micMuted ? <MicOff size={16} /> : <Mic size={16} />}
-        {micMuted ? 'UNMUTE' : 'MUTE'}
-      </button>
-    )}
-  </div>
-);
-
-const CenterPanel = ({ isSpeaking, transcript, triageCards, isConnected, onInterrupt }: { isSpeaking: boolean; transcript: string; triageCards: TriageData[]; isConnected: boolean; onInterrupt: () => void; }) => (
-  <div className="relative flex flex-col gap-4 overflow-hidden">
-    <div className="flex flex-col flex-1 p-4 card">
-      <div className="flex items-center justify-between mb-3">
-        <h2 className="text-sm font-semibold tracking-wider text-gray-400">AGENT TRANSCRIPT</h2>
-        {isSpeaking && (
-          <div className="flex items-center gap-2">
-            <span className="relative flex w-2.5 h-2.5">
-              <span className="absolute inline-flex w-full h-full bg-red-400 rounded-full opacity-75 animate-ping"></span>
-              <span className="relative inline-flex w-2.5 h-2.5 bg-red-500 rounded-full"></span>
-            </span>
-            <span className="text-xs font-semibold tracking-wider text-red-400">LIVE</span>
-          </div>
-        )}
-      </div>
-      <AgentVoiceBar isSpeaking={isSpeaking} />
-      <p className="flex-1 mt-3 text-lg text-slate-100 leading-relaxed">{transcript || "Waiting for agent..."}</p>
-    </div>
-    <div className="flex flex-col flex-1 p-4 overflow-hidden card">
-      <div className="flex items-center justify-between mb-3">
-        <h2 className="text-sm font-semibold tracking-wider text-gray-400">TRIAGE ASSESSMENT</h2>
-        {triageCards.length > 0 && (
-          <div className="flex items-center justify-center w-6 h-6 text-xs font-bold text-white bg-red-600 rounded-full shadow-[0_0_10px_rgba(239,68,68,0.5)]">
-            {triageCards.length}
-          </div>
-        )}
-      </div>
-      <div className="flex-1 -mr-2 pr-2 overflow-y-auto">
-        {triageCards.length === 0 ? (
-          <div className="flex items-center justify-center h-full border-2 border-dashed rounded-lg border-white/10">
-            <p className="text-sm text-gray-500">Triage cards will appear here</p>
-          </div>
-        ) : (
-          <div className="space-y-3">
-            {triageCards.map((card, index) => (
-              <TriageCard key={index} card={card} className="slide-up" style={{ animationDelay: `${index * 100}ms` }} />
-            ))}
-          </div>
-        )}
-      </div>
-    </div>
-    {isConnected && isSpeaking && (
-      <button onClick={onInterrupt} className="absolute bottom-4 right-4 btn btn-primary flex items-center gap-2">
-        <Zap size={16} /> INTERRUPT
-      </button>
-    )}
-  </div>
-);
-
-const RightPanel = ({ connectionState, onSessionToggle, language, onLanguageChange, cloudRunUrl, onCloudRunUrlChange, sessionLog, onDownloadReport }: { connectionState: string; onSessionToggle: () => void; language: string; onLanguageChange: (lang: string) => void; cloudRunUrl: string; onCloudRunUrlChange: (url: string) => void; sessionLog: LogEntry[]; onDownloadReport: () => void; }) => {
-  const sessionButtonContent = useMemo(() => {
-    switch (connectionState) {
-      case 'connecting': return <><Spinner /> CONNECTING...</>;
-      case 'connected': return <><PhoneOff size={16} /> END SESSION</>;
-      default: return 'START SESSION';
-    }
-  }, [connectionState]);
-
-  return (
-    <div className="flex flex-col gap-4">
-      <div className="p-4 card">
-        <button onClick={onSessionToggle} disabled={connectionState === 'connecting'} className={`w-full btn flex items-center justify-center gap-2 ${connectionState === 'connected' ? 'btn-danger' : 'btn-primary'}`}>
-          {connectionState === 'connected' && <div className="absolute w-full h-full rounded-md pulse-ring bg-red-500/50" />}
-          {sessionButtonContent}
-        </button>
-        <div className="mt-3 space-y-2">
-          <LanguageSelector value={language} onChange={onLanguageChange} disabled={connectionState !== 'disconnected'} />
-          <UrlInput value={cloudRunUrl} onChange={onCloudRunUrlChange} disabled={connectionState !== 'disconnected'} />
-        </div>
-      </div>
-      <div className="flex flex-col flex-1 p-4 overflow-hidden card">
-        <h2 className="mb-3 text-sm font-semibold tracking-wider text-gray-400">SESSION LOG</h2>
-        <div className="flex-1 -mr-2 pr-2 overflow-y-auto bg-black/20 rounded-md p-2">
-          <SessionLog log={sessionLog} />
-        </div>
-        <button onClick={onDownloadReport} className="w-full mt-3 btn btn-secondary flex items-center justify-center gap-2">
-          <Download size={16} /> DOWNLOAD REPORT
-        </button>
-      </div>
     </div>
   );
 };
 
-// --- UI Components ---
-
-const StatusPill = ({ icon, label, active }: { icon: React.ReactNode; label: string; active: boolean }) => (
-  <div className={`status-pill ${active ? 'text-green-400' : 'text-gray-500'}`}>
-    <div className={`w-2 h-2 rounded-full ${active ? 'bg-green-500 animate-pulse' : 'bg-gray-600'}`} />
-    {icon}
-    <span className="font-mono text-xs">{label}</span>
-  </div>
-);
-
-const LanguageSelector = ({ value, onChange, disabled }: { value: string; onChange: (lang: string) => void; disabled: boolean }) => {
-  const languages = { 'en': 'English', 'es': 'Español', 'fr': 'Français', 'ar': 'العربية', 'hi': 'हिन्दी', 'zh': '中文', 'sw': 'Kiswahili', 'ta': 'தமிழ்', 'pt': 'Português', 'ru': 'Русский' };
-  return (
-    <div className="relative">
-      <Languages className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-500" />
-      <select value={value} onChange={(e) => onChange(e.target.value)} disabled={disabled} className="w-full pl-10 pr-4 py-2 text-sm bg-gray-900 border border-gray-700 rounded-md appearance-none focus:outline-none focus:ring-1 focus:ring-red-500 disabled:opacity-50">
-        {Object.entries(languages).map(([code, name]) => <option key={code} value={code}>{name}</option>)}
-      </select>
-    </div>
-  );
-};
-
-const UrlInput = ({ value, onChange, disabled }: { value: string; onChange: (url: string) => void; disabled: boolean }) => (
-  <div className="relative">
-    <Settings className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-500" />
-    <input type="text" value={value} onChange={(e) => onChange(e.target.value)} className="input-dark pl-10" disabled={disabled} placeholder="Backend URL" />
-  </div>
-);
-
-const Spinner = () => (
-  <svg className="w-5 h-5 text-white animate-spin" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-  </svg>
-);
+export default App;

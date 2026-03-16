@@ -1,227 +1,165 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useState, useRef, useCallback, useEffect } from 'react';
 
-export interface UseAudioReturn {
-  isRecording: boolean;
-  error: string | null;
-  audioLevel: number;
-  startRecording: (onChunk: (base64: string) => void) => Promise<void>;
-  stopRecording: () => void;
-  getAnalyserNode: () => AnalyserNode | null;
+export interface AudioHook {
+  isMuted:    boolean
+  audioLevel: number
+  toggleMute: () => void
+  startAudio: (onChunk: (b64: string) => void, onSpeechEvent?: (type: 'user_speech_start' | 'user_speech_end') => void) => Promise<void>
+  stopAudio:  () => void
 }
 
-const SAMPLE_RATE = 16000;
-const CHUNK_DURATION_MS = 250; // Send audio every 250ms
-
-// Inline blob fallback — used only if /pcm-capture-processor.js can't be loaded.
-const WORKLET_SOURCE = `
-class PcmCaptureProcessor extends AudioWorkletProcessor {
-  process(inputs) {
-    const ch = inputs[0]?.[0];
-    if (ch && ch.length > 0) this.port.postMessage(ch.slice());
-    return true;
-  }
-}
-registerProcessor('pcm-capture-processor', PcmCaptureProcessor);
-`;
-
-export function useAudio(): UseAudioReturn {
-  const contextRef = useRef<AudioContext | null>(null);
-  const sourceRef = useRef<MediaStreamAudioSourceNode | null>(null);
-  const workletNodeRef = useRef<AudioWorkletNode | null>(null);
-  const analyserRef = useRef<AnalyserNode | null>(null);
-  const streamRef = useRef<MediaStream | null>(null);
-  const chunkBufferRef = useRef<Float32Array[]>([]);
-  const chunkTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
-  const onChunkRef = useRef<((base64: string) => void) | null>(null);
-  const rafActiveRef = useRef(false);
-  const blobUrlRef = useRef<string | null>(null);
-
-  const [isRecording, setIsRecording] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+export function useAudio(): AudioHook {
+  const [isMuted,    setIsMuted]    = useState(false);
   const [audioLevel, setAudioLevel] = useState(0);
 
-  const startRecording = useCallback(async (onChunk: (base64: string) => void) => {
-    setError(null);
+  const ctxRef       = useRef<AudioContext | null>(null);
+  const streamRef    = useRef<MediaStream | null>(null);
+  const workletRef   = useRef<AudioWorkletNode | null>(null);
+  const analyserRef  = useRef<AnalyserNode | null>(null);
+  const rafRef       = useRef<number>(0);
+  const mutedRef     = useRef(false);
+  const onChunkRef   = useRef<((b64: string) => void) | null>(null);
+  // Speech activity detection
+  const speechActiveRef    = useRef(false);
+  const silenceTimerRef    = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const onSpeechEventRef   = useRef<((type: 'user_speech_start' | 'user_speech_end') => void) | null>(null);
+
+  const startAudio = useCallback(async (onChunk: (b64: string) => void, onSpeechEvent?: (type: 'user_speech_start' | 'user_speech_end') => void) => {
     onChunkRef.current = onChunk;
+    onSpeechEventRef.current = onSpeechEvent ?? null;
 
     try {
+      // 1. Request mic permission
       const stream = await navigator.mediaDevices.getUserMedia({
         audio: {
-          sampleRate: SAMPLE_RATE,
           channelCount: 1,
           echoCancellation: true,
           noiseSuppression: true,
           autoGainControl: true,
-        },
-        video: false,
+        }
       });
-
       streamRef.current = stream;
 
-      const context = new AudioContext({ sampleRate: SAMPLE_RATE });
-      contextRef.current = context;
-      console.log('[MedVision Audio] AudioContext sampleRate:', context.sampleRate);
+      // 2. Create AudioContext at 16kHz for Gemini
+      const ctx = new AudioContext({ sampleRate: 16000 });
+      ctxRef.current = ctx;
 
-      if (context.state === 'suspended') {
-        await context.resume();
-        console.log('[MedVision Audio] AudioContext resumed');
+      // 3. Resume context (required — browsers suspend until user gesture)
+      if (ctx.state === 'suspended') {
+        await ctx.resume();
       }
 
-      // Register the PCM capture worklet.
-      // Prefer the static public file (no CSP/blob restrictions); fall back to
-      // an inline Blob URL if the file isn't reachable (e.g. production CDN).
-      try {
-        await context.audioWorklet.addModule('/pcm-capture-processor.js');
-        console.log('[MedVision Audio] Worklet loaded from /pcm-capture-processor.js');
-      } catch (e1) {
-        console.warn('[MedVision Audio] Static worklet failed, trying blob URL:', e1);
-        const blob = new Blob([WORKLET_SOURCE], { type: 'application/javascript' });
-        const blobUrl = URL.createObjectURL(blob);
-        blobUrlRef.current = blobUrl;
-        await context.audioWorklet.addModule(blobUrl);
-        console.log('[MedVision Audio] Worklet loaded from blob URL');
-      }
+      // 4. Load AudioWorklet processor
+      await ctx.audioWorklet.addModule('/pcm-capture-processor.js');
+      console.log('[useAudio] AudioWorklet loaded');
 
-      const source = context.createMediaStreamSource(stream);
-      sourceRef.current = source;
-
-      // Analyser for waveform visualisation
-      const analyser = context.createAnalyser();
+      // 5. Create nodes
+      const source   = ctx.createMediaStreamSource(stream);
+      const analyser = ctx.createAnalyser();
       analyser.fftSize = 256;
-      analyser.smoothingTimeConstant = 0.8;
       analyserRef.current = analyser;
+
+      const worklet = new AudioWorkletNode(ctx, 'pcm-capture-processor');
+      workletRef.current = worklet;
+
+      // 6. Receive PCM chunks from worklet → convert to base64 → fire callback
+      worklet.port.onmessage = (event) => {
+        if (mutedRef.current) return;
+        if (!onChunkRef.current) return;
+
+        const pcm16Buffer = event.data.pcm16 as ArrayBuffer;
+
+        // ArrayBuffer → base64 in chunks to avoid call stack overflow
+        const uint8  = new Uint8Array(pcm16Buffer);
+        let binary   = '';
+        const step   = 8192;
+        for (let i = 0; i < uint8.length; i += step) {
+          binary += String.fromCharCode(...uint8.subarray(i, i + step));
+        }
+        onChunkRef.current(btoa(binary));
+      };
+
+      // 7. Connect audio graph
       source.connect(analyser);
+      source.connect(worklet);
+      // Note: worklet does NOT need to connect to destination for processing to work
 
-      // AudioWorkletNode captures PCM quanta and posts them to the main thread
-      const workletNode = new AudioWorkletNode(context, 'pcm-capture-processor');
-      workletNodeRef.current = workletNode;
-      let quantaReceived = 0;
-      workletNode.port.onmessage = (e: MessageEvent<Float32Array>) => {
-        chunkBufferRef.current.push(e.data);
-        quantaReceived += 1;
-        if (quantaReceived === 1) {
-          console.log('[MedVision Audio] ✅ Worklet is posting audio quanta — mic active');
+      // 8. RAF loop for visual level meter
+      const tick = () => {
+        const data = new Uint8Array(analyser.frequencyBinCount);
+        analyser.getByteFrequencyData(data);
+        const avg = data.reduce((s, v) => s + v, 0) / data.length;
+        const level = Math.min(avg / 80, 1);
+        setAudioLevel(level);
+
+        // Speech activity detection: level > 0.02 = speaking
+        if (!mutedRef.current && onSpeechEventRef.current) {
+          const isSpeaking = level > 0.02;
+          if (isSpeaking && !speechActiveRef.current) {
+            // Transitioned to speaking
+            speechActiveRef.current = true;
+            if (silenceTimerRef.current) { clearTimeout(silenceTimerRef.current); silenceTimerRef.current = null; }
+            onSpeechEventRef.current('user_speech_start');
+          } else if (!isSpeaking && speechActiveRef.current) {
+            // Transitioned to silence — debounce 1500ms before calling speech_end
+            if (!silenceTimerRef.current) {
+              silenceTimerRef.current = setTimeout(() => {
+                if (speechActiveRef.current) {
+                  speechActiveRef.current = false;
+                  if (onSpeechEventRef.current) onSpeechEventRef.current('user_speech_end');
+                }
+                silenceTimerRef.current = null;
+              }, 1500);
+            }
+          }
         }
+
+        rafRef.current = requestAnimationFrame(tick);
       };
-      source.connect(workletNode);
-      // Connect to destination keeps the node alive in the audio graph;
-      // outputs are silent (processor never fills output buffers).
-      workletNode.connect(context.destination);
+      rafRef.current = requestAnimationFrame(tick);
 
-      // Audio level monitoring
-      rafActiveRef.current = true;
-      const dataArray = new Uint8Array(analyser.frequencyBinCount);
-      const updateLevel = () => {
-        if (!rafActiveRef.current || !analyserRef.current) return;
-        analyserRef.current.getByteFrequencyData(dataArray);
-        const avg = dataArray.reduce((sum, val) => sum + val, 0) / dataArray.length;
-        setAudioLevel(avg / 255);
-        requestAnimationFrame(updateLevel);
-      };
-      requestAnimationFrame(updateLevel);
+      console.log('[useAudio] Started successfully — sampleRate:', ctx.sampleRate);
 
-      // Flush accumulated quanta to Gemini every CHUNK_DURATION_MS
-      let chunksDispatched = 0;
-      chunkTimerRef.current = setInterval(() => {
-        if (chunkBufferRef.current.length === 0) return;
-
-        const totalLen = chunkBufferRef.current.reduce((s, b) => s + b.length, 0);
-        const combined = new Float32Array(totalLen);
-        let offset = 0;
-        for (const buf of chunkBufferRef.current) {
-          combined.set(buf, offset);
-          offset += buf.length;
-        }
-        chunkBufferRef.current = [];
-
-        const pcm16 = float32ToInt16(combined);
-        const base64 = arrayBufferToBase64(pcm16.buffer);
-        chunksDispatched += 1;
-        if (chunksDispatched % 20 === 1) {
-          console.debug(`[MedVision Audio] Dispatching chunk #${chunksDispatched} (${totalLen} samples)`);
-        }
-        onChunkRef.current?.(base64);
-      }, CHUNK_DURATION_MS);
-
-      setIsRecording(true);
-      console.log('[MedVision Audio] Recording started');
-    } catch (err) {
-      const message =
-        err instanceof DOMException && err.name === 'NotAllowedError'
-          ? 'Microphone permission denied — please allow microphone access'
-          : err instanceof DOMException && err.name === 'NotFoundError'
-          ? 'No microphone found — please connect a microphone'
-          : err instanceof Error
-          ? `Microphone error: ${err.message}`
-          : 'Microphone unavailable';
-      console.error('[MedVision Audio] startRecording failed:', err);
-      setError(message);
-      setIsRecording(false);
+    } catch (err: unknown) {
+      console.error('[useAudio] Failed:', err);
+      throw err;
     }
   }, []);
 
-  const stopRecording = useCallback(() => {
-    rafActiveRef.current = false;
+  const stopAudio = useCallback(() => {
+    cancelAnimationFrame(rafRef.current);
+    if (silenceTimerRef.current) { clearTimeout(silenceTimerRef.current); silenceTimerRef.current = null; }
+    workletRef.current?.port.close();
+    workletRef.current?.disconnect();
+    streamRef.current?.getTracks().forEach(t => t.stop());
+    ctxRef.current?.close();
 
-    if (chunkTimerRef.current) {
-      clearInterval(chunkTimerRef.current);
-      chunkTimerRef.current = null;
-    }
-    chunkBufferRef.current = [];
+    ctxRef.current         = null;
+    streamRef.current      = null;
+    workletRef.current     = null;
+    analyserRef.current    = null;
+    onChunkRef.current     = null;
+    onSpeechEventRef.current = null;
+    speechActiveRef.current  = false;
 
-    if (workletNodeRef.current) {
-      workletNodeRef.current.port.close();
-      workletNodeRef.current.disconnect();
-      workletNodeRef.current = null;
-    }
-    if (sourceRef.current) {
-      sourceRef.current.disconnect();
-      sourceRef.current = null;
-    }
-    if (contextRef.current) {
-      void contextRef.current.close();
-      contextRef.current = null;
-    }
-    if (streamRef.current) {
-      streamRef.current.getTracks().forEach(t => t.stop());
-      streamRef.current = null;
-    }
-    if (blobUrlRef.current) {
-      URL.revokeObjectURL(blobUrlRef.current);
-      blobUrlRef.current = null;
-    }
-    analyserRef.current = null;
-    setIsRecording(false);
+    setIsMuted(false);
     setAudioLevel(0);
+    mutedRef.current = false;
+
+    console.log('[useAudio] Stopped');
   }, []);
 
-  const getAnalyserNode = useCallback((): AnalyserNode | null => {
-    return analyserRef.current;
+  const toggleMute = useCallback(() => {
+    mutedRef.current = !mutedRef.current;
+    setIsMuted(mutedRef.current);
+    // Also disable the actual track for true hardware mute
+    streamRef.current?.getAudioTracks().forEach(t => {
+      t.enabled = !mutedRef.current;
+    });
+    console.log('[useAudio] Muted:', mutedRef.current);
   }, []);
 
-  useEffect(() => {
-    return () => { stopRecording(); };
-  }, [stopRecording]);
+  useEffect(() => () => stopAudio(), [stopAudio]);
 
-  return { isRecording, error, audioLevel, startRecording, stopRecording, getAnalyserNode };
-}
-
-// ── Helpers ───────────────────────────────────────────────────────────────────
-
-function float32ToInt16(float32: Float32Array): Int16Array {
-  const int16 = new Int16Array(float32.length);
-  for (let i = 0; i < float32.length; i++) {
-    const s = Math.max(-1, Math.min(1, float32[i]));
-    int16[i] = s < 0 ? s * 0x8000 : s * 0x7fff;
-  }
-  return int16;
-}
-
-function arrayBufferToBase64(buffer: ArrayBufferLike): string {
-  const bytes = new Uint8Array(buffer);
-  let binary = '';
-  for (let i = 0; i < bytes.byteLength; i++) {
-    binary += String.fromCharCode(bytes[i]);
-  }
-  return btoa(binary);
+  return { isMuted, audioLevel, toggleMute, startAudio, stopAudio };
 }
